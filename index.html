@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Vishnupriyaa Industries — Factory Management System</title>
+<title> BMS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600;9..144,700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="style.css"/>
@@ -15,8 +15,7 @@
   <div class="brand">
     <div class="brand-mark">VI</div>
     <div class="brand-info">
-      <span class="brand-name">Vishnupriyaa</span>
-      <span class="brand-tag">BMS v2</span>
+      <span class="brand-name">Vishnupriyaa Industries</span>
     </div>
   </div>
 
@@ -26,10 +25,7 @@
       <span>Dashboard</span>
     </button>
 
-    <div class="nav-section">
-      Inventory
-      <button class="nav-collapse-btn" id="collapse-inv" onclick="toggleNavSection('inv')">▼</button>
-    </div>
+    <div class="nav-section">Inventory<button class="nav-collapse-btn" id="collapse-inv" onclick="toggleNavSection('inv')">▼</button></div>
     <div class="nav-section-items" id="section-inv">
       <button class="nav-btn" data-page="materials">
         <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
@@ -37,44 +33,37 @@
         <span class="nav-count" id="nc-materials">0</span>
       </button>
       <button class="nav-btn" data-page="suppliers">
-        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         <span>Supplier Bills</span>
         <span class="nav-count" id="nc-suppliers">0</span>
       </button>
     </div>
 
-    <div class="nav-section">
-      Production
-      <button class="nav-collapse-btn" id="collapse-prod" onclick="toggleNavSection('prod')">▼</button>
-    </div>
-    <div class="nav-section-items" id="section-prod">
-      <button class="nav-btn" data-page="materials-predef">
-        <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-        <span>Material Sets</span>
-        <span class="nav-count" id="nc-predef">0</span>
-      </button>
+    <div class="nav-section">Workers<button class="nav-collapse-btn" id="collapse-workers" onclick="toggleNavSection('workers')">▼</button></div>
+    <div class="nav-section-items" id="section-workers">
       <button class="nav-btn" data-page="workers">
         <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         <span>Workers</span>
         <span class="nav-count" id="nc-workers">0</span>
       </button>
-      <button class="nav-btn" data-page="workorders">
-        <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-        <span>Work Orders</span>
-        <span class="nav-count active" id="nc-workorders">0</span>
-      </button>
     </div>
 
-    <div class="nav-section">
-      Output &amp; Returns
-      <button class="nav-collapse-btn" id="collapse-out" onclick="toggleNavSection('out')">▼</button>
-    </div>
-    <div class="nav-section-items" id="section-out">
+    <div class="nav-section">Production<button class="nav-collapse-btn" id="collapse-prod" onclick="toggleNavSection('prod')">▼</button></div>
+    <div class="nav-section-items" id="section-prod">
+      <button class="nav-btn" data-page="productions">
+        <svg viewBox="0 0 24 24"><path d="M2 20h20"/><path d="M5 20V8l7-5 7 5v12"/><path d="M9 20v-5h6v5"/></svg>
+        <span>Production Log</span>
+        <span class="nav-count" id="nc-productions">0</span>
+      </button>
       <button class="nav-btn" data-page="finished">
         <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
         <span>Finished Goods</span>
         <span class="nav-count success" id="nc-finished">0</span>
       </button>
+    </div>
+
+    <div class="nav-section">Sales<button class="nav-collapse-btn" id="collapse-sales" onclick="toggleNavSection('sales')">▼</button></div>
+    <div class="nav-section-items" id="section-sales">
       <button class="nav-btn" data-page="sales">
         <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
         <span>Sales Bills</span>
@@ -88,7 +77,7 @@
   </nav>
 
   <div class="sidebar-foot">
-    <div class="foot-stat"><span id="sf-active-jobs">0</span><small>Active Jobs</small></div>
+    <div class="foot-stat"><span id="sf-active">0</span><small>Holding Mats</small></div>
     <div class="foot-divider"></div>
     <div class="foot-stat"><span id="sf-low-stock">0</span><small>Low Stock</small></div>
   </div>
@@ -97,12 +86,8 @@
 <!-- TOPBAR -->
 <header class="topbar">
   <div class="topbar-left">
-    <button class="menu-toggle" id="menu-toggle">
-      <span></span><span></span><span></span>
-    </button>
-    <div class="breadcrumb">
-      <span class="bc-page" id="bc-page">Dashboard</span>
-    </div>
+    <button class="menu-toggle" id="menu-toggle"><span></span><span></span><span></span></button>
+    <div class="breadcrumb"><span class="bc-page" id="bc-page">Dashboard</span></div>
   </div>
   <div class="topbar-right">
     <div class="topbar-date" id="topbar-date"></div>
@@ -110,59 +95,51 @@
   </div>
 </header>
 
-<!-- MAIN CONTENT -->
+<!-- MAIN -->
 <main class="main" id="main">
-
-<!-- TOAST -->
 <div class="toast-wrap" id="toast-wrap"></div>
-
-<!-- OVERLAY -->
 <div class="page-overlay" id="page-overlay"></div>
 
-<!-- PAGE: DASHBOARD -->
+<!-- DASHBOARD -->
 <section class="page active" id="page-dashboard">
   <div class="page-inner">
     <div class="stat-grid" id="dash-stats"></div>
     <div id="dash-banners"></div>
     <div class="two-col">
-      <div class="card" id="dash-jobs-card">
-        <div class="card-hdr"><span class="card-title">Active Work Orders</span><button class="card-link" onclick="nav('workorders')">View all →</button></div>
-        <div class="card-body" id="dash-jobs"></div>
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">📦 Recent Issuances</span><button class="card-link" onclick="openIssueModal()">+ Issue Materials →</button></div>
+        <div class="card-body" id="dash-issuances"></div>
       </div>
-      <div class="card" id="dash-stock-card">
-        <div class="card-hdr"><span class="card-title">Stock Alerts</span><button class="card-link" onclick="nav('materials')">View all →</button></div>
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">⚠️ Stock Alerts</span><button class="card-link" onclick="nav('materials')">View all →</button></div>
         <div class="card-body" id="dash-stock-alerts"></div>
-      </div>
-    </div>
-    <div class="two-col">
-      <div class="card">
-        <div class="card-hdr"><span class="card-title">Recent Supplier Bills</span><button class="card-link" onclick="nav('suppliers')">View all →</button></div>
-        <div class="card-body" id="dash-bills"></div>
-      </div>
-      <div class="card">
-        <div class="card-hdr"><span class="card-title">Top Workers</span><button class="card-link" onclick="nav('workers')">View all →</button></div>
-        <div class="card-body" id="dash-workers-top"></div>
       </div>
     </div>
     <div class="two-col">
       <div class="card" style="border-color:var(--success)">
         <div class="card-hdr" style="background:#f1faf2"><span class="card-title" style="color:var(--success)">💰 Recent Sales</span><button class="card-link" onclick="nav('sales')">View all →</button></div>
-        <div class="card-body" id="dash-recent-sales"></div>
+        <div class="card-body" id="dash-sales"></div>
       </div>
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">👷 Top Workers (Earnings)</span><button class="card-link" onclick="nav('workers')">View all →</button></div>
+        <div class="card-body" id="dash-workers-top"></div>
+      </div>
+    </div>
+    <div class="two-col">
       <div class="card">
         <div class="card-hdr"><span class="card-title">Quick Actions</span></div>
         <div class="card-body" style="display:flex;flex-direction:column;gap:0.6rem">
-          <button class="btn btn-primary" style="width:100%;justify-content:flex-start" onclick="nav('workorders');openWOModal()">📋 New Work Order</button>
-          <button class="btn btn-ghost" style="width:100%;justify-content:flex-start" onclick="nav('suppliers');openSupModal()">🧾 Record Supplier Bill</button>
-          <button class="btn btn-ghost" style="width:100%;justify-content:flex-start" onclick="nav('sales');openSalesModal()">💰 New Sales Bill</button>
-          <button class="btn btn-ghost" style="width:100%;justify-content:flex-start" onclick="nav('returns')">🔄 View Returns</button>
+          <button class="btn btn-primary" style="width:100%;justify-content:flex-start" onclick="openIssueModal()">📦 Issue Materials to Worker</button>
+          <button class="btn btn-ghost" style="width:100%;justify-content:flex-start" onclick="openProductionModal()">✅ Record Production</button>
+          <button class="btn btn-ghost" style="width:100%;justify-content:flex-start" onclick="openSupModal()">🧾 Add Supplier Bill</button>
+          <button class="btn btn-ghost" style="width:100%;justify-content:flex-start" onclick="openSalesModal()">💰 New Sales Bill</button>
         </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- PAGE: RAW MATERIALS -->
+<!-- RAW MATERIALS -->
 <section class="page" id="page-materials">
   <div class="page-inner">
     <div class="toolbar">
@@ -170,16 +147,13 @@
       <div class="toolbar-pills" id="mat-pills">
         <button class="tpill active" data-val="all">All</button>
         <button class="tpill" data-val="ok">In Stock</button>
-        <button class="tpill" data-val="low">Low Stock</button>
-        <button class="tpill" data-val="out">Out of Stock</button>
+        <button class="tpill" data-val="low">Low</button>
+        <button class="tpill" data-val="out">Out</button>
       </div>
     </div>
     <div class="table-card">
       <table class="data-table">
-        <thead><tr>
-          <th>Material</th><th>Category</th><th>Qty</th><th>Unit</th>
-          <th>Unit Cost ₹</th><th>Stock Value ₹</th><th>Status</th><th></th>
-        </tr></thead>
+        <thead><tr><th>Material</th><th>Category</th><th>Qty</th><th>Unit</th><th>Unit Cost ₹</th><th>Stock Value ₹</th><th>Status</th><th></th></tr></thead>
         <tbody id="mat-tbody"></tbody>
       </table>
       <div class="table-foot"><span id="mat-foot-l"></span><span id="mat-foot-r"></span></div>
@@ -187,43 +161,28 @@
   </div>
 </section>
 
-<!-- PAGE: SUPPLIER BILLS -->
+<!-- SUPPLIER BILLS -->
 <section class="page" id="page-suppliers">
   <div class="page-inner">
-    <div class="toolbar">
-      <div class="search-wrap"><span class="search-ico">⌕</span><input type="text" class="search-input" id="sup-search" placeholder="Search by supplier…"/></div>
-    </div>
+    <div class="toolbar"><div class="search-wrap"><span class="search-ico">⌕</span><input type="text" class="search-input" id="sup-search" placeholder="Search by supplier…"/></div></div>
     <div id="sup-list"></div>
   </div>
 </section>
 
-<!-- PAGE: MATERIAL SETS -->
-<section class="page" id="page-materials-predef">
-  <div class="page-inner">
-    <div class="toolbar">
-      <div class="search-wrap"><span class="search-ico">⌕</span><input type="text" class="search-input" id="predef-search" placeholder="Search material sets…"/></div>
-    </div>
-    <div id="predef-grid"></div>
-  </div>
-</section>
-
-<!-- PAGE: WORKERS -->
+<!-- WORKERS -->
 <section class="page" id="page-workers">
   <div class="page-inner">
     <div class="toolbar">
-      <div class="search-wrap"><span class="search-ico">⌕</span><input type="text" class="search-input" id="worker-search" placeholder="Search workers by name…"/></div>
+      <div class="search-wrap"><span class="search-ico">⌕</span><input type="text" class="search-input" id="worker-search" placeholder="Search workers…"/></div>
       <div class="toolbar-pills" id="worker-pills">
         <button class="tpill active" data-val="all">All</button>
-        <button class="tpill" data-val="active">On Job</button>
-        <button class="tpill" data-val="free">Available</button>
+        <button class="tpill" data-val="holding">Holding Materials</button>
+        <button class="tpill" data-val="free">Free</button>
       </div>
     </div>
     <div class="table-card">
       <table class="data-table">
-        <thead><tr>
-          <th>Name</th><th>Phone</th><th>Skill</th>
-          <th>Jobs Done</th><th>Earnings ₹</th><th>Status</th><th></th>
-        </tr></thead>
+        <thead><tr><th>Name</th><th>Phone</th><th>Skill</th><th>Jobs Done</th><th>Earnings ₹</th><th>Status</th><th></th></tr></thead>
         <tbody id="worker-tbody"></tbody>
       </table>
       <div class="table-foot"><span id="worker-foot"></span><span></span></div>
@@ -231,113 +190,83 @@
   </div>
 </section>
 
-<!-- PAGE: WORK ORDERS -->
-<section class="page" id="page-workorders">
+<!-- WORKER PROFILE -->
+<section class="page" id="page-worker-profile">
+  <div class="page-inner"><div class="t-empty"><span class="t-empty-ico">👤</span>Select a worker to view profile</div></div>
+</section>
+
+<!-- PRODUCTION LOG -->
+<section class="page" id="page-productions">
   <div class="page-inner">
-    <div class="toolbar">
-      <div class="search-wrap"><span class="search-ico">⌕</span><input type="text" class="search-input" id="wo-search" placeholder="Search work orders…"/></div>
-      <div class="toolbar-pills" id="wo-pills">
-        <button class="tpill active" data-val="all">All</button>
-        <button class="tpill" data-val="Materials Issued">Materials Issued</button>
-        <button class="tpill" data-val="Done">Done</button>
-        <button class="tpill" data-val="Approved">Approved</button>
-      </div>
-    </div>
-    <div id="wo-list"></div>
+    <div class="toolbar"><div class="search-wrap"><span class="search-ico">⌕</span><input type="text" class="search-input" id="prod-search" placeholder="Search production…"/></div></div>
+    <div id="prod-list"></div>
   </div>
 </section>
 
-<!-- PAGE: FINISHED GOODS -->
+<!-- FINISHED GOODS -->
 <section class="page" id="page-finished">
   <div class="page-inner">
     <div class="stat-grid" id="fg-stats"></div>
-    <div class="toolbar" style="margin-top:0">
-      <div class="search-wrap"><span class="search-ico">⌕</span><input type="text" class="search-input" id="fg-search" placeholder="Search finished goods…"/></div>
-    </div>
+    <div class="toolbar" style="margin-top:0"><div class="search-wrap"><span class="search-ico">⌕</span><input type="text" class="search-input" id="fg-search" placeholder="Search finished goods…"/></div></div>
     <div id="fg-list"></div>
   </div>
 </section>
 
-<!-- PAGE: REPORTS -->
+<!-- SALES BILLS -->
+<section class="page" id="page-sales">
+  <div class="page-inner">
+    <div class="stat-grid" id="sales-stats"></div>
+    <div class="toolbar" style="margin-top:0"><div class="search-wrap"><span class="search-ico">⌕</span><input type="text" class="search-input" id="sales-search" placeholder="Search sales…"/></div></div>
+    <div id="sales-list"></div>
+  </div>
+</section>
+
+<!-- REPORTS -->
 <section class="page" id="page-reports">
   <div class="page-inner">
     <div class="card" style="margin-bottom:1.2rem">
       <div class="card-hdr"><span class="card-title">Live Summary</span></div>
       <div class="card-body" id="report-summary-body"></div>
     </div>
-
     <div class="card" style="margin-bottom:1.2rem">
-      <div class="card-hdr"><span class="card-title">🌐 Access Data on Any Desktop</span></div>
+      <div class="card-hdr"><span class="card-title">🌐 Access on Any Desktop</span></div>
       <div class="card-body">
-        <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:1rem">
-          This app stores data in your browser's localStorage — it's tied to <strong>this browser on this device</strong>.
-          To access it on another desktop, use the <strong>Export/Import</strong> backup below.
-        </p>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:0.8rem;margin-bottom:1rem">
+        <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:1rem">Data is stored in this browser's localStorage. Export a backup and import it on any other device or browser.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0.8rem;margin-bottom:1rem">
           <div class="stat-card" style="padding:0.8rem;text-align:left">
-            <div style="font-weight:600;margin-bottom:0.3rem">📤 Option 1: Export Backup</div>
-            <p style="font-size:0.76rem;color:var(--text-tertiary);margin-bottom:0.6rem">Download a .json file with all your data. Open it on another PC to import.</p>
-            <button class="btn btn-primary btn-sm" style="width:100%" onclick="exportDataJSON()">⬇ Download Backup (.json)</button>
+            <div style="font-weight:600;margin-bottom:0.3rem">📤 Export Backup</div>
+            <p style="font-size:0.76rem;color:var(--text-tertiary);margin-bottom:0.6rem">Download all data as a .json file.</p>
+            <button class="btn btn-primary btn-sm" style="width:100%" onclick="exportDataJSON()">⬇ Download Backup</button>
           </div>
           <div class="stat-card" style="padding:0.8rem;text-align:left">
-            <div style="font-weight:600;margin-bottom:0.3rem">📥 Option 2: Import Backup</div>
-            <p style="font-size:0.76rem;color:var(--text-tertiary);margin-bottom:0.6rem">Load a previously exported .json file to restore or migrate data.</p>
-            <label class="btn btn-ghost btn-sm" style="width:100%;cursor:pointer;text-align:center">
-              ⬆ Import Backup (.json)
-              <input type="file" id="import-file-input" accept=".json" style="display:none"/>
-            </label>
+            <div style="font-weight:600;margin-bottom:0.3rem">📥 Import Backup</div>
+            <p style="font-size:0.76rem;color:var(--text-tertiary);margin-bottom:0.6rem">Load a .json backup file to restore data.</p>
+            <label class="btn btn-ghost btn-sm" style="width:100%;cursor:pointer;text-align:center">⬆ Import Backup<input type="file" id="import-file-input" accept=".json" style="display:none"/></label>
           </div>
           <div class="stat-card" style="padding:0.8rem;text-align:left">
-            <div style="font-weight:600;margin-bottom:0.3rem">☁ Option 3: Cloud Hosting</div>
-            <p style="font-size:0.76rem;color:var(--text-tertiary);margin-bottom:0.3rem">Host these 3 files (index.html, script.js, style.css) on:</p>
-            <ul style="font-size:0.74rem;color:var(--text-tertiary);padding-left:1rem;margin:0">
-              <li><strong>Google Drive</strong> with apps.diagrams.net or similar</li>
-              <li><strong>GitHub Pages</strong> (free, public URL)</li>
-              <li><strong>Netlify Drop</strong> — drag &amp; drop, instant URL</li>
-              <li><strong>Local network</strong> — serve with VS Code Live Server</li>
+            <div style="font-weight:600;margin-bottom:0.3rem">☁ Cloud Options</div>
+            <ul style="font-size:0.74rem;color:var(--text-tertiary);padding-left:1rem;margin:0.3rem 0 0">
+              <li><strong>Netlify Drop</strong> — drag &amp; drop 3 files, instant URL</li>
+              <li><strong>GitHub Pages</strong> — free, permanent URL</li>
+              <li><strong>Local network</strong> — VS Code Live Server</li>
             </ul>
           </div>
         </div>
-        <div style="background:var(--primary-light);border-radius:8px;padding:0.75rem 1rem;font-size:0.76rem;color:var(--text-secondary)">
-          💡 <strong>Best practice:</strong> Export a backup every week. The .json file contains all materials, workers, orders, finished goods and sales — load it on any browser to continue working.
-        </div>
+        <div style="background:var(--primary-light);border-radius:8px;padding:0.75rem 1rem;font-size:0.76rem;color:var(--text-secondary)">💡 <strong>Best practice:</strong> Export a backup weekly. Load it on any browser to continue working.</div>
       </div>
     </div>
-
-    <div class="card" style="border: 1px solid rgba(198,40,40,0.3)">
+    <div class="card" style="border:1px solid rgba(175, 40, 40, 0.3)">
       <div class="card-hdr" style="background:var(--danger-light)"><span class="card-title" style="color:var(--danger)">⚠ Danger Zone</span></div>
       <div class="card-body">
-        <p style="font-size:0.82rem; color:var(--text-tertiary); margin-bottom:1rem">This will permanently erase ALL data — materials, workers, orders, bills, and finished goods. This cannot be undone.</p>
+        <p style="font-size:0.82rem;color:var(--text-tertiary);margin-bottom:1rem">Permanently erase ALL data. Cannot be undone.</p>
         <button class="btn btn-danger" onclick="confirmDeleteAllData()">🗑 Delete All Data</button>
       </div>
     </div>
   </div>
 </section>
 
-<!-- PAGE: WORKER PROFILE -->
-<section class="page" id="page-worker-profile">
-  <div class="page-inner">
-    <div class="t-empty"><span class="t-empty-ico">👤</span>Select a worker to view profile</div>
-  </div>
-</section>
-
-<!-- PAGE: SALES BILLS -->
-<section class="page" id="page-sales">
-  <div class="page-inner">
-    <div class="stat-grid" id="sales-stats"></div>
-    <div class="toolbar" style="margin-top:0">
-      <div class="search-wrap"><span class="search-ico">⌕</span><input type="text" class="search-input" id="sales-search" placeholder="Search sales bills…"/></div>
-    </div>
-    <div id="sales-list"></div>
-  </div>
-</section>
-
 </main>
-
-<!-- MODALS CONTAINER -->
 <div id="modals-container"></div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
