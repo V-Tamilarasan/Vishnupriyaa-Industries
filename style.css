@@ -4,15 +4,15 @@
    ═══════════════════════════════════════════════════════════════ */
 
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-
+*{
+  user-select:none;
+}
 :root {
-  /* Core palette */
   --amber:         #d97706;
   --amber-dark:    #b45309;
   --amber-light:   #fef3c7;
   --amber-pale:    #fffbeb;
 
-  /* Sidebar */
   --sidebar-bg:    #1a1f2e;
   --sidebar-hover: #252c3f;
   --sidebar-act:   #2e3650;
@@ -20,19 +20,16 @@
   --sidebar-txt:   #94a3b8;
   --sidebar-ttl:   #e2e8f0;
 
-  /* App background */
   --bg:            #f8f9fb;
   --bg-card:       #ffffff;
   --bg-secondary:  #f1f3f6;
   --bg-tertiary:   #e8eaed;
 
-  /* Text */
   --text-primary:  #1a1f2e;
   --text-secondary:#374151;
   --text-tertiary: #6b7280;
   --text-light:    #9ca3af;
 
-  /* Semantic */
   --success:       #059669;
   --success-light: #d1fae5;
   --warning:       #d97706;
@@ -42,7 +39,6 @@
   --info:          #2563eb;
   --info-light:    #dbeafe;
 
-  /* Surface */
   --border:        #e5e7eb;
   --border-light:  #f3f4f6;
   --shadow-xs:     0 1px 2px rgba(0,0,0,0.05);
@@ -50,11 +46,9 @@
   --shadow:        0 4px 16px rgba(0,0,0,0.1);
   --shadow-lg:     0 8px 32px rgba(0,0,0,0.14);
 
-  /* Layout */
   --sidebar-w:     260px;
   --topbar-h:      60px;
 
-  /* Fonts */
   --font-display:  'Fraunces', Georgia, serif;
   --font-body:     'DM Sans', system-ui, sans-serif;
   --font-mono:     'DM Mono', 'Courier New', monospace;
@@ -388,13 +382,6 @@ label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spa
 .banner-success { background:var(--success-light); border-left:3px solid var(--success); }
 .banner-ico { font-size:1rem; flex-shrink:0; margin-top:0.05rem; }
 
-/* ── EXCESS ROWS ──────────────────────────────────────────── */
-.excess-row { display:flex; align-items:center; gap:0.6rem; padding:0.5rem 0; border-bottom:1px solid var(--border-light); }
-.excess-row:last-child { border-bottom:none; }
-.er-name { flex:1; font-weight:600; font-size:0.82rem; }
-.er-info { font-family:var(--font-mono); font-size:0.74rem; color:var(--text-tertiary); white-space:nowrap; }
-.er-input { width:80px; text-align:right; }
-
 /* ── TOAST ────────────────────────────────────────────────── */
 .toast-wrap { position:fixed; bottom:1.5rem; right:1.5rem; z-index:900; display:flex; flex-direction:column; gap:0.5rem; }
 .toast {
@@ -440,6 +427,63 @@ label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spa
 .template-name { font-weight:700; font-size:0.9rem; color:var(--text-primary); }
 .template-body { padding:0.8rem 1rem; }
 
+/* ── COST ROW ─────────────────────────────────────────────── */
+.cost-row {
+  display:flex; align-items:center; gap:0.5rem; margin-bottom:0.4rem;
+}
+
+/* ── SALES MULTI-PRODUCT — SN Results Panel ───────────────── */
+.sn-results-panel {
+  margin-top:0.5rem;
+  border:1px solid var(--border); border-radius:10px;
+  background:var(--bg-card); box-shadow:var(--shadow-sm);
+  max-height:280px; overflow-y:auto;
+}
+.sn-group { border-bottom:1px solid var(--border-light); padding:0.5rem 0; }
+.sn-group:last-child { border-bottom:none; }
+.sn-group-label { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.7px; color:var(--amber-dark); padding:0.3rem 0.85rem 0.4rem; }
+.sn-item { display:flex; align-items:center; justify-content:space-between; padding:0.45rem 0.85rem; cursor:pointer; transition:background 0.12s; gap:0.75rem; }
+.sn-item:hover { background:var(--amber-pale); }
+.sn-item-info { display:flex; flex-direction:column; gap:0.15rem; min-width:0; }
+.sn-badge { font-family:var(--font-mono); font-size:0.78rem; font-weight:600; color:var(--text-primary); }
+
+/* Sales add button — icon only "+" ───────────────────────── */
+.sn-add-btn {
+  display:inline-flex; align-items:center; justify-content:center;
+  background:var(--amber); color:#fff;
+  border:none; border-radius:6px;
+  width:28px; height:28px;
+  font-size:1.1rem; font-weight:700; line-height:1;
+  cursor:pointer; flex-shrink:0;
+  font-family:var(--font-body);
+  transition:background 0.15s, transform 0.1s;
+  box-shadow:0 1px 4px rgba(217,119,6,0.3);
+}
+.sn-add-btn:hover  { background:var(--amber-dark); }
+.sn-add-btn:active { transform:scale(0.92); }
+
+/* ── SALES CART ITEMS ─────────────────────────────────────── */
+.cart-item {
+  display:flex; align-items:center; justify-content:space-between; gap:0.75rem;
+  padding:0.75rem; border:1px solid var(--border); border-radius:10px;
+  background:var(--bg-card); margin-bottom:0.5rem;
+  transition:border-color 0.15s, box-shadow 0.15s;
+}
+.cart-item:hover { border-color:var(--amber); box-shadow:0 0 0 2px rgba(217,119,6,0.08); }
+.cart-item-info { flex:1; min-width:0; }
+
+/* ── SALES TOTAL PANEL ────────────────────────────────────── */
+.sales-total-panel {
+  margin-top:0.8rem;
+  background:var(--bg-secondary); border-radius:10px;
+  border:1px solid var(--border); overflow:hidden;
+}
+.stp-row { display:flex; justify-content:space-between; align-items:center; padding:0.55rem 0.9rem; font-size:0.82rem; border-bottom:1px solid var(--border-light); }
+.stp-row:last-child { border-bottom:none; }
+.stp-tax { font-size:0.74rem; color:var(--text-tertiary); font-family:var(--font-mono); }
+.stp-grand { background:var(--amber-pale); font-weight:700; font-size:0.95rem; color:var(--success); }
+.stp-grand span:last-child { font-family:var(--font-mono); font-size:1.05rem; }
+
 /* ── RESPONSIVE ───────────────────────────────────────────── */
 @media (max-width:900px) {
   .stat-grid { grid-template-columns:repeat(2,1fr); }
@@ -451,4 +495,5 @@ label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spa
   .modal-backdrop { align-items:flex-end; padding:0; }
   .acts { flex-wrap:wrap; }
   .template-grid { grid-template-columns:1fr; }
+  .cart-item { flex-wrap:wrap; }
 }
