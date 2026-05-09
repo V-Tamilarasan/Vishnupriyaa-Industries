@@ -247,7 +247,6 @@ function openMatModal(id){
   document.getElementById('fm-min').value=m?.minLevel||10;
   const cats=[...new Set(DB.all('materials').map(m=>m.category).filter(Boolean))];
   buildCombo('fm-cat','fm-cat-drop',cats);
-  // Units: user can type freely; combo shows saved units for reference
   buildCombo('fm-unit','fm-unit-drop',DB.savedUnits());
   openModal('modal-material');
   setTimeout(()=>document.getElementById('fm-name')?.focus(),100);
@@ -256,7 +255,7 @@ function saveMat(){
   const name=document.getElementById('fm-name').value.trim(), unit=document.getElementById('fm-unit').value.trim();
   if(!name){toast('Name required','danger');return;}
   if(!unit){toast('Unit required','danger');return;}
-  DB.saveUnit(unit); // persist unit for future autocomplete
+  DB.saveUnit(unit);
   const d={name,category:document.getElementById('fm-cat').value.trim(),unit,qty:parseFloat(document.getElementById('fm-qty').value)||0,unitCost:parseFloat(document.getElementById('fm-cost').value)||0,minLevel:parseFloat(document.getElementById('fm-min').value)||10};
   if(_editMatId) DB.update('materials',_editMatId,d); else DB.insert('materials',d);
   closeModal('modal-material'); renderMaterials(); updateCounts(); toast(`"${name}" ${_editMatId?'updated':'added'}`);
@@ -268,58 +267,265 @@ function deleteMat(id){
 
 /* ═══════════════════════════════════════════════════
    SUPPLIER BILLS
+   — Inline new-material mini-form when name not found
    ═══════════════════════════════════════════════════ */
-let _supRows=[];
+let _supRowCount = 0;
+
 function openSupModal(){
-  _supRows=[];
+  _supRowCount = 0;
   document.getElementById('fs-supplier').value='';
   document.getElementById('fs-billno').value='';
   document.getElementById('fs-date').value=todayStr();
-  renderSupRows();
+  document.getElementById('sup-rows-wrap').innerHTML=
+    `<div class="sup-empty-hint">No items yet — click "+ Add Row"</div>`;
+  document.getElementById('sup-total').textContent='₹0.00';
   buildCombo('fs-supplier','fs-supplier-drop',[...new Set(DB.all('bills').map(b=>b.supplier).filter(Boolean))]);
+
+  /* ── wire the Add Row button fresh each time the modal opens ── */
+  const addBtn = document.getElementById('sup-add-row');
+  if(addBtn){
+    const fresh = addBtn.cloneNode(true);
+    addBtn.parentNode.replaceChild(fresh, addBtn);
+    document.getElementById('sup-add-row').addEventListener('click', supAddRow);
+  }
+
+  /* ── wire the Save button fresh each time ── */
+  const saveBtn = document.getElementById('sup-save');
+  if(saveBtn){
+    const fresh = saveBtn.cloneNode(true);
+    saveBtn.parentNode.replaceChild(fresh, saveBtn);
+    document.getElementById('sup-save').addEventListener('click', saveSupplierBill);
+  }
+
   openModal('modal-supplier');
 }
-function renderSupRows(){
-  const mats=DB.all('materials'), wrap=document.getElementById('sup-rows-wrap'); if(!wrap)return;
-  if(!_supRows.length){ wrap.innerHTML=`<div class="add-row-btn" style="margin-bottom:0.3rem;cursor:default">No items yet — click "+ Add Row"</div>`; document.getElementById('sup-total').textContent='₹0.00'; return; }
-  wrap.innerHTML=_supRows.map((r,i)=>`
+
+/* Add a brand-new blank row to the DOM directly */
+function supAddRow(){
+  const wrap = document.getElementById('sup-rows-wrap');
+  const hint = wrap.querySelector('.sup-empty-hint');
+  if(hint) hint.remove();
+
+  const i = _supRowCount++;
+  const div = document.createElement('div');
+  div.className = 'bill-row-wrap';
+  div.id = `sr-wrap-${i}`;
+  div.innerHTML = `
     <div class="bill-row">
-      <div class="combo-wrap"><input class="finput" id="sr-mat-${i}" value="${r.mat||''}" placeholder="Material name" autocomplete="off"/><div class="combo-drop" id="sr-mat-drop-${i}"></div></div>
-      <input class="finput" id="sr-qty-${i}" type="number" min="0" step="0.01" value="${r.qty||''}" placeholder="0"/>
-      <div class="combo-wrap"><input class="finput" id="sr-unit-${i}" value="${r.unit||''}" placeholder="unit" autocomplete="off"/><div class="combo-drop" id="sr-unit-drop-${i}"></div></div>
-      <div style="position:relative"><span style="position:absolute;left:.65rem;top:50%;transform:translateY(-50%);color:var(--text-light);font-size:.78rem;pointer-events:none">₹</span><input class="finput" id="sr-price-${i}" type="number" min="0" step="0.01" value="${r.price||''}" placeholder="0.00" style="padding-left:1.5rem"/></div>
-      <button class="row-del" onclick="supDel(${i})">×</button>
-    </div>`).join('');
-  _supRows.forEach((_,i)=>{
-    document.getElementById(`sr-qty-${i}`)?.addEventListener('input',e=>{_supRows[i].qty=parseFloat(e.target.value)||0;calcSupTotal();});
-    document.getElementById(`sr-price-${i}`)?.addEventListener('input',e=>{_supRows[i].price=parseFloat(e.target.value)||0;calcSupTotal();});
-    document.getElementById(`sr-mat-${i}`)?.addEventListener('input',e=>_supRows[i].mat=e.target.value);
-    document.getElementById(`sr-unit-${i}`)?.addEventListener('input',e=>{_supRows[i].unit=e.target.value;});
-    buildCombo(`sr-unit-${i}`,`sr-unit-drop-${i}`,DB.savedUnits(),val=>{_supRows[i].unit=val;});
-    buildCombo(`sr-mat-${i}`,`sr-mat-drop-${i}`,mats.map(m=>m.name),val=>{
-      _supRows[i].mat=val;
-      const m=mats.find(m=>m.name===val);
-      if(m){ const u=document.getElementById(`sr-unit-${i}`); if(u)u.value=m.unit||''; _supRows[i].unit=m.unit||''; const p=document.getElementById(`sr-price-${i}`); if(p&&!_supRows[i].price){p.value=m.unitCost||''; _supRows[i].price=parseFloat(m.unitCost)||0;} }
-      calcSupTotal();
-    });
-  }); calcSupTotal();
+      <div class="combo-wrap">
+        <input class="finput" id="sr-mat-${i}" placeholder="Material name" autocomplete="off"/>
+        <div class="combo-drop" id="sr-mat-drop-${i}"></div>
+      </div>
+      <input class="finput" id="sr-qty-${i}" type="number" min="0" step="0.01" placeholder="0"/>
+      <div class="combo-wrap">
+        <input class="finput" id="sr-unit-${i}" placeholder="unit" autocomplete="off"/>
+        <div class="combo-drop" id="sr-unit-drop-${i}"></div>
+      </div>
+      <div style="position:relative">
+        <span style="position:absolute;left:.65rem;top:50%;transform:translateY(-50%);color:var(--text-light);font-size:.78rem;pointer-events:none">₹</span>
+        <input class="finput" id="sr-price-${i}" type="number" min="0" step="0.01" placeholder="0.00" style="padding-left:1.5rem"/>
+      </div>
+      <button class="row-del" onclick="supDelRow(${i})">×</button>
+    </div>
+    <div id="sr-prompt-${i}"></div>`;
+  wrap.appendChild(div);
+
+  document.getElementById(`sr-qty-${i}`).addEventListener('input', calcSupTotal);
+  document.getElementById(`sr-price-${i}`).addEventListener('input', calcSupTotal);
+
+  document.getElementById(`sr-unit-${i}`).addEventListener('input', ()=>{
+    const nmfU = document.getElementById(`nmf-unit-${i}`);
+    if(nmfU) nmfU.value = document.getElementById(`sr-unit-${i}`).value;
+  });
+
+  buildCombo(`sr-unit-${i}`, `sr-unit-drop-${i}`, DB.savedUnits(), val=>{
+    document.getElementById(`sr-unit-${i}`).value = val;
+    const nmfU = document.getElementById(`nmf-unit-${i}`);
+    if(nmfU) nmfU.value = val;
+  });
+
+  const mats = DB.all('materials');
+  document.getElementById(`sr-mat-${i}`).addEventListener('input', ()=>{
+    _checkNewMatPrompt(i);
+    calcSupTotal();
+  });
+  buildCombo(`sr-mat-${i}`, `sr-mat-drop-${i}`, mats.map(m=>m.name), val=>{
+    document.getElementById(`sr-mat-${i}`).value = val;
+    const m = mats.find(m=>m.name===val);
+    if(m){
+      const uEl = document.getElementById(`sr-unit-${i}`);
+      if(uEl && !uEl.value) uEl.value = m.unit||'';
+      const pEl = document.getElementById(`sr-price-${i}`);
+      if(pEl && !pEl.value) pEl.value = m.unitCost||'';
+    }
+    _checkNewMatPrompt(i);
+    calcSupTotal();
+  });
+
+  setTimeout(()=>document.getElementById(`sr-mat-${i}`)?.focus(), 50);
 }
-function supDel(i){_supRows.splice(i,1);renderSupRows();}
-function calcSupTotal(){ const t=_supRows.reduce((s,r)=>s+(parseFloat(r.qty)||0)*(parseFloat(r.price)||0),0); const el=document.getElementById('sup-total'); if(el)el.textContent=fmtMoney(t); }
+
+function supDelRow(i){
+  const el = document.getElementById(`sr-wrap-${i}`);
+  if(el) el.remove();
+  calcSupTotal();
+  const wrap = document.getElementById('sup-rows-wrap');
+  if(!wrap.querySelector('.bill-row-wrap')){
+    wrap.innerHTML = `<div class="sup-empty-hint">No items yet — click "+ Add Row"</div>`;
+    document.getElementById('sup-total').textContent='₹0.00';
+  }
+}
+
+function calcSupTotal(){
+  let t = 0;
+  document.querySelectorAll('#sup-rows-wrap .bill-row-wrap').forEach(row=>{
+    const id = row.id.replace('sr-wrap-','');
+    const qty   = parseFloat(document.getElementById(`sr-qty-${id}`)?.value  ||0);
+    const price = parseFloat(document.getElementById(`sr-price-${id}`)?.value||0);
+    t += qty * price;
+  });
+  const el = document.getElementById('sup-total');
+  if(el) el.textContent = fmtMoney(t);
+}
+
+/* Show/hide the new-material mini-form below a row */
+function _checkNewMatPrompt(i){
+  const nameEl = document.getElementById(`sr-mat-${i}`);
+  const promptEl = document.getElementById(`sr-prompt-${i}`);
+  if(!nameEl || !promptEl) return;
+
+  const name = nameEl.value.trim();
+  if(!name){ promptEl.innerHTML=''; return; }
+
+  const exists = DB.all('materials').some(m=>m.name.toLowerCase()===name.toLowerCase());
+  if(exists){
+    promptEl.innerHTML='';
+    const m = DB.all('materials').find(m=>m.name.toLowerCase()===name.toLowerCase());
+    if(m){
+      const uEl=document.getElementById(`sr-unit-${i}`); if(uEl&&!uEl.value) uEl.value=m.unit||'';
+      const pEl=document.getElementById(`sr-price-${i}`); if(pEl&&!pEl.value){ pEl.value=m.unitCost||''; calcSupTotal(); }
+    }
+    return;
+  }
+
+  const existing = promptEl.querySelector('.new-mat-form');
+  if(existing && existing.dataset.forName === name) return;
+
+  const cats=[...new Set(DB.all('materials').map(m=>m.category).filter(Boolean))];
+  promptEl.innerHTML=`
+    <div class="new-mat-form" data-for-name="${name}">
+      <div class="nmf-header">
+        <span class="nmf-badge">✨ New Material</span>
+        <span class="nmf-hint">"<strong>${name}</strong>" isn't in Raw Materials yet — fill the details below. It will be created when you save the bill.</span>
+      </div>
+      <div class="nmf-fields">
+        <div class="nmf-field">
+          <label class="nmf-label">Unit <span class="nmf-req">*</span></label>
+          <div class="combo-wrap" style="width:100%">
+            <input class="finput nmf-input" id="nmf-unit-${i}" placeholder="kg / pcs / feet…" autocomplete="off"/>
+            <div class="combo-drop" id="nmf-unit-drop-${i}"></div>
+          </div>
+        </div>
+        <div class="nmf-field">
+          <label class="nmf-label">Category</label>
+          <div class="combo-wrap" style="width:100%">
+            <input class="finput nmf-input" id="nmf-cat-${i}" placeholder="Wood, Polish…" autocomplete="off"/>
+            <div class="combo-drop" id="nmf-cat-drop-${i}"></div>
+          </div>
+        </div>
+        <div class="nmf-field">
+          <label class="nmf-label">Min Alert Level</label>
+          <input class="finput nmf-input" id="nmf-min-${i}" type="number" min="0" step="1" value="10" placeholder="10"/>
+        </div>
+      </div>
+      <div class="nmf-note">💡 Unit cost = price you enter above · Quantity = qty you enter above</div>
+    </div>`;
+
+  const nmfUnitEl = document.getElementById(`nmf-unit-${i}`);
+  nmfUnitEl.addEventListener('input', e=>{
+    const mainU = document.getElementById(`sr-unit-${i}`);
+    if(mainU) mainU.value = e.target.value;
+  });
+
+  buildCombo(`nmf-unit-${i}`,`nmf-unit-drop-${i}`,DB.savedUnits(),val=>{
+    document.getElementById(`nmf-unit-${i}`).value=val;
+    const mainU=document.getElementById(`sr-unit-${i}`); if(mainU) mainU.value=val;
+  });
+  buildCombo(`nmf-cat-${i}`,`nmf-cat-drop-${i}`,cats);
+}
+
+/* Read all rows from DOM at save time */
+function _readSupRowsFromDOM(){
+  const rows=[];
+  document.querySelectorAll('#sup-rows-wrap .bill-row-wrap').forEach(row=>{
+    const i = row.id.replace('sr-wrap-','');
+    const mat   = (document.getElementById(`sr-mat-${i}`)  ?.value||'').trim();
+    const qty   = parseFloat(document.getElementById(`sr-qty-${i}`)  ?.value||0);
+    const unit  = (document.getElementById(`sr-unit-${i}`) ?.value||'').trim();
+    const price = parseFloat(document.getElementById(`sr-price-${i}`)?.value||0);
+    const nmfUnit= (document.getElementById(`nmf-unit-${i}`)?.value||'').trim();
+    const nmfCat = (document.getElementById(`nmf-cat-${i}`) ?.value||'').trim();
+    const nmfMin = parseFloat(document.getElementById(`nmf-min-${i}`) ?.value||10);
+    const isNew  = !!document.querySelector(`#sr-prompt-${i} .new-mat-form`);
+    const effectiveUnit = (isNew && nmfUnit) ? nmfUnit : unit;
+    rows.push({mat,qty,unit:effectiveUnit,price,isNew,nmfCat,nmfMin});
+  });
+  return rows;
+}
+
 function saveSupplierBill(){
-  const supplier=document.getElementById('fs-supplier').value.trim(), date=document.getElementById('fs-date').value;
-  if(!supplier){toast('Supplier name required','danger');return;}
-  if(!date){toast('Select a date','danger');return;}
-  const valid=_supRows.filter(r=>r.mat&&parseFloat(r.qty)>0);
-  if(!valid.length){toast('Add at least one material row','danger');return;}
-  // Save units used for future reference
+  const supplier = document.getElementById('fs-supplier').value.trim();
+  const date     = document.getElementById('fs-date').value;
+  if(!supplier){ toast('Supplier name required','danger'); return; }
+  if(!date)    { toast('Select a date','danger'); return; }
+
+  const allRows = _readSupRowsFromDOM();
+  const valid   = allRows.filter(r=>r.mat && r.qty>0);
+  if(!valid.length){ toast('Add at least one material row with a name and quantity','danger'); return; }
+
+  const missingUnit = valid.filter(r=>r.isNew && !r.unit);
+  if(missingUnit.length){
+    toast('Please fill in the Unit for: '+missingUnit.map(r=>r.mat).join(', '),'danger');
+    return;
+  }
+
   valid.forEach(r=>{ if(r.unit) DB.saveUnit(r.unit); });
-  const total=valid.reduce((s,r)=>s+(parseFloat(r.qty)||0)*(parseFloat(r.price)||0),0);
-  DB.insert('bills',{supplier,billno:document.getElementById('fs-billno').value.trim(),date,items:valid.map(r=>({...r})),total});
-  DB.applyBill(valid);
-  closeModal('modal-supplier'); renderSuppliers(); renderMaterials(); updateCounts();
-  toast(`Bill from "${supplier}" saved — stock updated`);
+  const total = valid.reduce((s,r)=>s+r.qty*r.price, 0);
+
+  DB.insert('bills',{
+    supplier,
+    billno: document.getElementById('fs-billno').value.trim(),
+    date,
+    items: valid.map(r=>({mat:r.mat, qty:r.qty, unit:r.unit, price:r.price})),
+    total
+  });
+
+  let newCount = 0;
+  valid.forEach(r=>{
+    const ex = DB.all('materials').find(m=>m.name.toLowerCase()===r.mat.toLowerCase());
+    if(ex){
+      DB.update('materials', ex.id, {
+        qty: parseFloat(ex.qty||0)+r.qty,
+        ...(!ex.unitCost && r.price ? {unitCost:r.price} : {})
+      });
+    } else {
+      DB.insert('materials',{
+        name    : r.mat,
+        category: r.nmfCat||'',
+        unit    : r.unit||'',
+        qty     : r.qty,
+        unitCost: r.price||0,
+        minLevel: r.nmfMin||10,
+      });
+      newCount++;
+    }
+  });
+
+  closeModal('modal-supplier');
+  renderSuppliers(); renderMaterials(); updateCounts();
+  toast(`Bill from "${supplier}" saved${newCount?` — ${newCount} new material(s) added`:''}  — stock updated`);
 }
+
 function renderSuppliers(){
   const bills=DB.all('bills'), search=(document.getElementById('sup-search')?.value||'').toLowerCase();
   const filtered=bills.filter(b=>b.supplier.toLowerCase().includes(search)||(b.billno||'').toLowerCase().includes(search));
@@ -595,7 +801,6 @@ function saveDirectReturn(){
 
 /* ═══════════════════════════════════════════════════
    PRODUCT TEMPLATES
-   Overhead: label only (no category field)
    ═══════════════════════════════════════════════════ */
 let _tplMatRows=[], _tplOverheadRows=[], _editTplId=null;
 function openTemplateModal(id){
@@ -634,7 +839,6 @@ function renderTplMatRows(){
 }
 function tplDelRow(i){_tplMatRows.splice(i,1);renderTplMatRows();}
 
-/* Overhead rows — label only, no category */
 function renderTplOverheadRows(){
   const wrap=document.getElementById('tpl-overhead-rows'); if(!wrap) return;
   if(!_tplOverheadRows.length){
@@ -670,7 +874,6 @@ function saveTemplate(){
   const name=document.getElementById('ftpl-name').value.trim();
   if(!name){toast('Template name required','danger');return;}
   const mats=_tplMatRows.filter(r=>r.mat);
-  // Save any new units from template materials
   mats.forEach(r=>{ if(r.unit) DB.saveUnit(r.unit); });
   const overheads=_tplOverheadRows.filter(r=>r.label&&parseFloat(r.amount)>0);
   const d={name,desc:document.getElementById('ftpl-desc').value.trim(),materials:mats,overheads};
@@ -713,7 +916,6 @@ function deleteTemplate(id){ if(!confirm('Delete this template?'))return; DB.del
 
 /* ═══════════════════════════════════════════════════
    PRODUCTION ENTRY
-   Overhead costs from template are snapshotted and shown in the log
    ═══════════════════════════════════════════════════ */
 let _prodMatRows=[], _prodPreWid=null, _prodOverheadsSnapshot=[];
 function openProductionModal(preWid=null){
@@ -808,7 +1010,6 @@ function _applyTemplateToProd(template){
     });
     renderProdMatRows();
   }
-  // Snapshot overhead costs from template for this production
   _prodOverheadsSnapshot=(template.overheads||[]).map(o=>({label:o.label,amount:parseFloat(o.amount||0)}));
   _renderOverheadPreview();
 }
@@ -840,7 +1041,6 @@ function renderProdMatRows(){
     document.getElementById(`fp-mat-${i}`)?.addEventListener('input',e=>{_prodMatRows[i].mat=e.target.value; renderProdMatRows();});
     document.getElementById(`fp-qty-${i}`)?.addEventListener('input',e=>{_prodMatRows[i].qty=parseFloat(e.target.value)||0; renderProdMatRows();});
   });
-  // Live material cost display
   const matCost=_prodMatRows.reduce((s,r)=>{ if(!r.mat||!r.qty)return s; const m=DB.all('materials').find(m=>m.name===r.mat); return s+parseFloat(r.qty||0)*parseFloat(m?.unitCost||0); },0);
   const costEl=document.getElementById('fp-mat-cost');
   if(costEl && matCost>0) costEl.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0.75rem;background:var(--amber-pale);border-radius:8px;font-size:0.8rem"><span style="color:var(--text-tertiary)">Raw material cost per piece</span><strong style="font-family:var(--font-mono);color:var(--amber-dark)">${fmtMoney(matCost)}</strong></div>`;
@@ -890,7 +1090,6 @@ function saveProduction(){
     DB.update('workers',worker.id,{holdings:remaining,totalJobs:(worker.totalJobs||0)+pieces,totalEarned:(worker.totalEarned||0)+totalWageAll});
   }
 
-  // Snapshot overhead from template for the production record
   const overheadsSnapshot=[..._prodOverheadsSnapshot];
   const ohCostPerPiece=overheadsSnapshot.reduce((s,o)=>s+parseFloat(o.amount||0),0);
 
@@ -917,38 +1116,95 @@ function saveProduction(){
 }
 
 /* ═══════════════════════════════════════════════════
-   PRODUCTION LOG — shows mat cost + overhead
+   PRODUCTION LOG
    ═══════════════════════════════════════════════════ */
 function renderProductions(){
   const prods=DB.all('productions'), search=(document.getElementById('prod-search')?.value||'').toLowerCase();
   const fl=prods.filter(p=>(p.product||'').toLowerCase().includes(search)||(p.workerName||'').toLowerCase().includes(search)||((p.serialNumbers||[p.serialNumber||'']).join(' ')).toLowerCase().includes(search));
   const listEl=document.getElementById('prod-list'); if(!listEl)return;
-  if(!fl.length){listEl.innerHTML=`<div class="table-card"><div class="t-empty"><span class="t-empty-ico">🏭</span>${prods.length?'No results':'No production recorded yet'}</div></div>`;return;}
-  listEl.innerHTML=`<div class="table-card"><table class="data-table"><thead><tr>
-    <th>Product</th><th>Serial Number(s)</th><th>Worker</th><th>Date</th><th>Pcs</th>
-    <th>Total Wage</th><th>Mat. Cost / pc</th><th>Overhead / pc</th><th>Total Cost / pc</th><th>Materials Used</th>
-  </tr></thead><tbody>
-    ${fl.map(p=>{
-      const serials=p.serialNumbers||[p.serialNumber||'—'];
-      const matCost=parseFloat(p.matCostPerPiece||0);
-      const ohCost=parseFloat(p.ohCostPerPiece||(p.overheadsSnapshot||[]).reduce((s,o)=>s+parseFloat(o.amount||0),0)||0);
-      const totalCostPc=matCost+ohCost;
-      return `<tr>
-        <td class="td-name">${p.product}</td>
-        <td style="font-family:var(--font-mono);font-size:0.72rem">${serials.map(s=>`<span class="badge badge-gray" style="font-size:0.65rem;margin:0.1rem">${s}</span>`).join('')}</td>
-        <td><button class="card-link" onclick="nav('worker-profile','${p.workerId}')">${p.workerName}</button></td>
-        <td class="td-mono">${fmtDate(p.date)}</td>
-        <td class="td-mono">${p.piecesCount||1}</td>
-        <td class="td-mono">${fmtMoney(p.totalWage||0)}</td>
-        <td class="td-mono" style="color:var(--amber-dark)">${matCost>0?fmtMoney(matCost):'—'}</td>
-        <td class="td-mono" style="color:var(--info)">
-          ${ohCost>0?`<span title="${(p.overheadsSnapshot||[]).map(o=>`${o.label}: ${fmtMoney(o.amount)}`).join('\n')}" style="cursor:help;border-bottom:1px dashed var(--info)">${fmtMoney(ohCost)}</span>`:'—'}
-        </td>
-        <td class="td-mono" style="font-weight:700;color:var(--text-primary)">${totalCostPc>0?fmtMoney(totalCostPc):'—'}</td>
-        <td style="font-size:0.73rem;color:var(--text-tertiary)">${(p.materialsUsed||[]).map(m=>`${fmtNum(m.qty)} ${m.unit} ${m.mat}`).join(', ')||'—'}</td>
-      </tr>`;
-    }).join('')}
-  </tbody></table><div class="table-foot"><span>${fl.length} of ${prods.length} entries</span></div></div>`;
+
+  if(!fl.length){
+    listEl.innerHTML=`<div class="prod-empty-state"><div class="prod-empty-ico">🏭</div><div class="prod-empty-title">${prods.length?'No results found':'No production recorded yet'}</div><div class="prod-empty-sub">${prods.length?'Try a different search term':'Click "+ Record Production" to log your first entry'}</div></div>`;
+    return;
+  }
+
+  const totalPieces=fl.reduce((s,p)=>s+(p.piecesCount||1),0);
+  const totalWages=fl.reduce((s,p)=>s+parseFloat(p.totalWage||0),0);
+  const totalMatCost=fl.reduce((s,p)=>s+parseFloat(p.matCostPerPiece||0)*(p.piecesCount||1),0);
+  const totalOhCost=fl.reduce((s,p)=>s+parseFloat(p.ohCostPerPiece||0)*(p.piecesCount||1),0);
+
+  listEl.innerHTML=`
+    <div class="prod-summary-bar">
+      <div class="psb-stat"><span class="psb-val">${fl.length}</span><span class="psb-lbl">Batches</span></div>
+      <div class="psb-divider"></div>
+      <div class="psb-stat"><span class="psb-val">${totalPieces}</span><span class="psb-lbl">Pieces</span></div>
+      <div class="psb-divider"></div>
+      <div class="psb-stat"><span class="psb-val psb-amber">${fmtMoney(totalWages)}</span><span class="psb-lbl">Wages</span></div>
+      <div class="psb-divider"></div>
+      <div class="psb-stat"><span class="psb-val psb-blue">${fmtMoney(totalMatCost)}</span><span class="psb-lbl">Mat. Cost</span></div>
+      <div class="psb-divider"></div>
+      <div class="psb-stat"><span class="psb-val psb-green">${fmtMoney(totalWages+totalMatCost+totalOhCost)}</span><span class="psb-lbl">Total Cost</span></div>
+    </div>
+    <div class="prod-cards">
+      ${fl.map(p=>{
+        const serials=p.serialNumbers||[p.serialNumber||'—'];
+        const matCost=parseFloat(p.matCostPerPiece||0);
+        const ohCost=parseFloat(p.ohCostPerPiece||(p.overheadsSnapshot||[]).reduce((s,o)=>s+parseFloat(o.amount||0),0)||0);
+        const totalCostPc=matCost+ohCost;
+        const pieces=p.piecesCount||1;
+        const wagePerPc=parseFloat(p.wagePerPiece||0)||(parseFloat(p.totalWage||0)/pieces);
+        const grandCostPc=totalCostPc+wagePerPc;
+        const ohTitle=(p.overheadsSnapshot||[]).map(o=>`${o.label}: ${fmtMoney(o.amount)}`).join('\n');
+        return `
+        <div class="prod-card">
+          <div class="prod-card-left">
+            <div class="prod-card-icon">🏭</div>
+          </div>
+          <div class="prod-card-body">
+            <div class="prod-card-top">
+              <div class="prod-card-title">${p.product}</div>
+              <div class="prod-card-meta">
+                <span class="prod-meta-chip prod-chip-worker" onclick="nav('worker-profile','${p.workerId}')">
+                  <span class="pmc-icon">👷</span>${p.workerName}
+                </span>
+                <span class="prod-meta-chip">📅 ${fmtDate(p.date)}</span>
+                <span class="prod-meta-chip prod-chip-count">${pieces} pc${pieces>1?'s':''}</span>
+              </div>
+            </div>
+            <div class="prod-serials">
+              ${serials.map(s=>`<span class="prod-sn-tag">📟 ${s}</span>`).join('')}
+            </div>
+            <div class="prod-card-costs">
+              <div class="pcc-item">
+                <span class="pcc-label">Wage / pc</span>
+                <span class="pcc-value pcc-amber">${fmtMoney(wagePerPc)}</span>
+              </div>
+              ${matCost>0?`<div class="pcc-item">
+                <span class="pcc-label">Mat. cost / pc</span>
+                <span class="pcc-value pcc-blue">${fmtMoney(matCost)}</span>
+              </div>`:''}
+              ${ohCost>0?`<div class="pcc-item" title="${ohTitle}" style="cursor:help">
+                <span class="pcc-label">Overhead / pc ℹ</span>
+                <span class="pcc-value pcc-purple">${fmtMoney(ohCost)}</span>
+              </div>`:''}
+              ${grandCostPc>0?`<div class="pcc-item pcc-total">
+                <span class="pcc-label">Total / pc</span>
+                <span class="pcc-value pcc-total-val">${fmtMoney(grandCostPc)}</span>
+              </div>`:''}
+              <div class="pcc-item pcc-total-wages">
+                <span class="pcc-label">Total wages</span>
+                <span class="pcc-value pcc-amber">${fmtMoney(p.totalWage||0)}</span>
+              </div>
+            </div>
+            ${(p.materialsUsed||[]).length?`<div class="prod-mats-used">
+              <span class="pmu-label">Materials used (per pc):</span>
+              ${p.materialsUsed.map(m=>`<span class="pmu-tag">${fmtNum(m.qty)} ${m.unit} ${m.mat}</span>`).join('')}
+            </div>`:''}
+            ${p.notes?`<div class="prod-notes">💬 ${p.notes}</div>`:''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
 }
 
 /* ═══════════════════════════════════════════════════
@@ -1012,8 +1268,7 @@ function renderFinished(){
 function deleteFG(id){ if(!confirm('Delete this record?'))return; DB.delete('finished',id); renderFinished(); updateCounts(); toast('Deleted','warning'); }
 
 /* ═══════════════════════════════════════════════════
-   SALES — multi-item bill
-   "+" icon only button (no text)
+   SALES
    ═══════════════════════════════════════════════════ */
 let _cartItems = [];
 
@@ -1256,7 +1511,7 @@ function createModals(){
   </div>
 
   <div class="modal-backdrop" id="modal-supplier">
-    <div class="modal modal-lg"><div class="modal-hdr"><div><h3 class="modal-title">New Supplier Bill</h3><p class="modal-sub">Stock updates automatically on save</p></div><button class="modal-close" onclick="closeModal('modal-supplier')">×</button></div>
+    <div class="modal modal-lg"><div class="modal-hdr"><div><h3 class="modal-title">New Supplier Bill</h3><p class="modal-sub">Stock updates automatically on save. New material names are auto-created.</p></div><button class="modal-close" onclick="closeModal('modal-supplier')">×</button></div>
     <div class="modal-body">
       <div class="form-row three">
         <div class="field-group"><label>Supplier *</label><div class="combo-wrap"><input class="finput" id="fs-supplier" type="text" placeholder="Supplier name" autocomplete="off"/><div class="combo-drop" id="fs-supplier-drop"></div></div></div>
@@ -1287,14 +1542,12 @@ function createModals(){
     <div class="modal-body">
       <div class="form-row"><div class="field-group fg-full"><label>Template Name *</label><input class="finput" id="ftpl-name" type="text" placeholder="e.g. Teak Dining Chair, 3-Seater Sofa…"/></div></div>
       <div class="form-row"><div class="field-group fg-full"><label>Description</label><input class="finput" id="ftpl-desc" type="text" placeholder="Optional notes…"/></div></div>
-
       <div class="approve-section" style="margin-top:0.5rem">
         <p class="section-label">Expected Materials (per piece)</p>
         <div class="mat-recipe-hdr"><span>Material</span><span>Qty</span><span>Unit</span><span></span></div>
         <div id="tpl-mat-rows"></div>
         <button class="add-row-btn" id="tpl-add-row">+ Add Material</button>
       </div>
-
       <div class="approve-section">
         <p class="section-label">Additional Overhead Costs (per piece)</p>
         <p class="section-hint">Add fixed costs like electricity, rent, fuel that go into making this product</p>
@@ -1337,11 +1590,11 @@ function createModals(){
           <div class="field-group"><label>Date *</label><input class="finput" id="fp-date" type="date"/></div>
         </div>
         <div class="form-row">
-          <div class="field-group"><label>Actual Product Name * <span style="font-weight:400;text-transform:none;font-size:0.7rem">(what the worker made)</span></label><input class="finput" id="fp-product" type="text" placeholder="e.g. Teak Chair, Dining Table…"/></div>
+          <div class="field-group"><label>Actual Product Name *</label><input class="finput" id="fp-product" type="text" placeholder="e.g. Teak Chair, Dining Table…"/></div>
           <div class="field-group"><label>No. of Pieces *</label><input class="finput" id="fp-pieces" type="number" min="1" step="1" value="1" placeholder="1"/></div>
         </div>
         <div style="margin-top:0.4rem">
-          <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--amber-dark);margin-bottom:0.5rem">Serial Numbers <span style="font-weight:400;font-size:0.65rem;color:var(--text-tertiary)">(one per piece — each must be unique)</span></div>
+          <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--amber-dark);margin-bottom:0.5rem">Serial Numbers</div>
           <div id="fp-serial-rows"></div>
         </div>
       </div>
@@ -1382,7 +1635,6 @@ function createModals(){
   <div class="modal-backdrop" id="modal-sales">
     <div class="modal modal-lg"><div class="modal-hdr"><div><h3 class="modal-title">New Sales Bill</h3><p class="modal-sub">Search by product name — select serial numbers to add to cart</p></div><button class="modal-close" onclick="closeModal('modal-sales')">×</button></div>
     <div class="modal-body">
-
       <div class="approve-section">
         <p class="section-label">Add Products to Bill</p>
         <div class="field-group" style="margin-bottom:0.6rem">
@@ -1391,7 +1643,6 @@ function createModals(){
         </div>
         <div id="fsl-serial-results" style="margin-bottom:0.5rem"></div>
       </div>
-
       <div class="approve-section">
         <p class="section-label">Cart <span id="fsl-cart-count" style="font-weight:400;font-size:0.7rem;color:var(--text-tertiary)"></span></p>
         <div id="fsl-cart-wrap">
@@ -1403,7 +1654,6 @@ function createModals(){
           <div style="display:flex;justify-content:space-between;font-size:0.95rem;padding-top:0.4rem;border-top:1px solid var(--border)"><span style="font-weight:700">Total</span><strong id="fsl-grand-total" style="font-family:var(--font-mono);color:var(--success);font-size:1.05rem">₹0.00</strong></div>
         </div>
       </div>
-
       <div class="approve-section">
         <p class="section-label">Buyer Details</p>
         <div class="form-row three"><div class="field-group"><label>Type *</label><select class="finput" id="fsl-buyer-type"><option value="Shop">🏪 Shop</option><option value="Customer">👤 Customer</option></select></div><div class="field-group"><label>Name *</label><input class="finput" id="fsl-buyer-name" type="text" placeholder="Name or shop name"/></div><div class="field-group"><label>Phone</label><input class="finput" id="fsl-buyer-phone" type="tel" placeholder="Phone"/></div></div>
@@ -1439,8 +1689,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('mat-save')?.addEventListener('click',saveMat);
 
   document.getElementById('sup-search')?.addEventListener('input',renderSuppliers);
-  document.getElementById('sup-add-row')?.addEventListener('click',()=>{ _supRows.push({mat:'',qty:0,unit:'',price:0}); renderSupRows(); });
-  document.getElementById('sup-save')?.addEventListener('click',saveSupplierBill);
+  /* NOTE: sup-add-row and sup-save are wired inside openSupModal() each time
+     the modal opens, to avoid stale closures and double-fire issues. */
 
   document.getElementById('worker-search')?.addEventListener('input',renderWorkers);
   document.querySelectorAll('#worker-pills .tpill').forEach(b=>b.addEventListener('click',()=>{ document.querySelectorAll('#worker-pills .tpill').forEach(x=>x.classList.remove('active')); b.classList.add('active'); _workerFilter=b.dataset.val; renderWorkers(); }));
