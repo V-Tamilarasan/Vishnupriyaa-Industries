@@ -39,7 +39,7 @@ const DB = (() => {
     clearAll(){ COLS.forEach(c=>{ _c[c]=[]; localStorage.removeItem(PFX+c); }); },
     exportAll(){ return {exportedAt:new Date().toISOString(), ...Object.fromEntries(COLS.map(c=>[c,_c[c]]))}; },
     importAll(data){ COLS.forEach(c=>{ if(data[c]){ _c[c]=data[c]; localStorage.setItem(PFX+c,JSON.stringify(data[c])); } }); },
-    /* ── unit memory: save units used for future autocomplete ── */
+    /* ── unit memory ── */
     saveUnit(unit){
       if(!unit) return;
       const stored = JSON.parse(localStorage.getItem(PFX+'_units')||'[]');
@@ -267,7 +267,6 @@ function deleteMat(id){
 
 /* ═══════════════════════════════════════════════════
    SUPPLIER BILLS
-   — Inline new-material mini-form when name not found
    ═══════════════════════════════════════════════════ */
 let _supRowCount = 0;
 
@@ -281,7 +280,6 @@ function openSupModal(){
   document.getElementById('sup-total').textContent='₹0.00';
   buildCombo('fs-supplier','fs-supplier-drop',[...new Set(DB.all('bills').map(b=>b.supplier).filter(Boolean))]);
 
-  /* ── wire the Add Row button fresh each time the modal opens ── */
   const addBtn = document.getElementById('sup-add-row');
   if(addBtn){
     const fresh = addBtn.cloneNode(true);
@@ -289,7 +287,6 @@ function openSupModal(){
     document.getElementById('sup-add-row').addEventListener('click', supAddRow);
   }
 
-  /* ── wire the Save button fresh each time ── */
   const saveBtn = document.getElementById('sup-save');
   if(saveBtn){
     const fresh = saveBtn.cloneNode(true);
@@ -300,7 +297,6 @@ function openSupModal(){
   openModal('modal-supplier');
 }
 
-/* Add a brand-new blank row to the DOM directly */
 function supAddRow(){
   const wrap = document.getElementById('sup-rows-wrap');
   const hint = wrap.querySelector('.sup-empty-hint');
@@ -388,7 +384,6 @@ function calcSupTotal(){
   if(el) el.textContent = fmtMoney(t);
 }
 
-/* Show/hide the new-material mini-form below a row */
 function _checkNewMatPrompt(i){
   const nameEl = document.getElementById(`sr-mat-${i}`);
   const promptEl = document.getElementById(`sr-prompt-${i}`);
@@ -454,7 +449,6 @@ function _checkNewMatPrompt(i){
   buildCombo(`nmf-cat-${i}`,`nmf-cat-drop-${i}`,cats);
 }
 
-/* Read all rows from DOM at save time */
 function _readSupRowsFromDOM(){
   const rows=[];
   document.querySelectorAll('#sup-rows-wrap .bill-row-wrap').forEach(row=>{
@@ -622,6 +616,7 @@ function renderWorkerProfile(){
       <button class="btn btn-ghost btn-sm" onclick="nav('workers')">← Workers</button>
       <button class="btn btn-primary btn-sm" onclick="openIssueModal('${wid}')">📦 Issue Materials</button>
       <button class="btn btn-success btn-sm" onclick="openProductionModal('${wid}')">✅ Record Production</button>
+      <button class="btn btn-ghost btn-sm" style="background:var(--info-light);color:var(--info);border-color:#bfdbfe" onclick="openReturnStockModal('${wid}')">↩ Return to Stock</button>
     </div>
 
     <div class="card" style="margin-bottom:1.2rem">
@@ -646,7 +641,7 @@ function renderWorkerProfile(){
           <span class="card-title" style="${holdings.length?'color:var(--amber-dark)':''}">📦 Currently Holding</span>
           <div style="display:flex;gap:0.4rem;align-items:center">
             ${holdings.length?`<span id="wp-holding-val" style="font-size:0.72rem;font-family:var(--font-mono);color:var(--amber-dark)">${fmtMoney(totalHoldingValue)}</span>`:''}
-            ${holdings.length?`<button class="btn btn-ghost btn-sm" onclick="openDirectReturn('${wid}')">↩ Return</button>`:''}
+            ${holdings.length?`<button class="btn btn-ghost btn-sm" onclick="openReturnStockModal('${wid}')">↩ Return</button>`:''}
             <button class="btn btn-ghost btn-sm" id="wp-holding-edit-btn" onclick="toggleHoldingEdit('${wid}')">✏️ Edit</button>
           </div>
         </div>
@@ -706,8 +701,10 @@ function _renderHoldingsView(holdings){
   </table>`;
 }
 
-/* ── Holdings edit mode ── */
+/* ── Holdings edit mode — NOW BALANCES STOCK ── */
 let _holdingEditMode = false;
+let _holdingEditOldSnapshot = []; // snapshot before editing
+
 function toggleHoldingEdit(wid){
   _holdingEditMode = !_holdingEditMode;
   const worker = DB.find('workers', wid);
@@ -716,6 +713,8 @@ function toggleHoldingEdit(wid){
   const btn  = document.getElementById('wp-holding-edit-btn');
   if(!body) return;
   if(_holdingEditMode){
+    // Take snapshot of current holdings before editing
+    _holdingEditOldSnapshot = JSON.parse(JSON.stringify(worker.holdings||[]));
     btn.textContent='✕ Cancel';
     btn.style.background='var(--danger-light)';
     btn.style.borderColor='var(--danger)';
@@ -723,6 +722,7 @@ function toggleHoldingEdit(wid){
     body.innerHTML = _renderHoldingsEditForm(worker.holdings||[], wid);
     _wireHoldingEditForm(wid);
   } else {
+    _holdingEditOldSnapshot = [];
     btn.textContent='✏️ Edit';
     btn.style.background='';btn.style.borderColor='';btn.style.color='';
     body.innerHTML = _renderHoldingsView(worker.holdings||[]);
@@ -732,6 +732,10 @@ function toggleHoldingEdit(wid){
 function _renderHoldingsEditForm(holdings, wid){
   const rows = holdings.length ? holdings : [];
   return `
+    <div class="banner banner-info" style="margin-bottom:0.7rem;font-size:0.77rem">
+      <span class="banner-ico">⚖️</span>
+      <div>Raw material stock will be <strong>automatically balanced</strong> based on the difference between old and new holdings when you save.</div>
+    </div>
     <div id="he-rows">
       ${rows.map((h,i)=>`
         <div class="he-row" id="he-row-${i}">
@@ -750,7 +754,7 @@ function _renderHoldingsEditForm(holdings, wid){
     </div>
     <button class="add-row-btn" style="margin-top:0.5rem" onclick="heAddRow('${wid}')">+ Add Row</button>
     <div style="display:flex;gap:0.5rem;margin-top:0.6rem">
-      <button class="btn btn-primary btn-sm" style="flex:1" onclick="saveHoldingEdit('${wid}')">💾 Save Holdings</button>
+      <button class="btn btn-primary btn-sm" style="flex:1" onclick="saveHoldingEdit('${wid}')">💾 Save & Balance Stock</button>
     </div>`;
 }
 
@@ -768,7 +772,6 @@ function _wireHoldingEditForm(wid){
   document.querySelectorAll('.he-unit').forEach((inp,i)=>{
     buildCombo(inp.id, `he-unit-drop-${i}`, DB.savedUnits());
   });
-  // set _heRowCount to match current row count
   _heRowCount = document.querySelectorAll('.he-row').length;
 }
 
@@ -808,23 +811,343 @@ function heDelRow(i){
   if(el) el.remove();
 }
 
+/**
+ * saveHoldingEdit — saves new holdings AND auto-balances raw material stock.
+ * Logic:
+ *   For each material that appears in old OR new holdings:
+ *     delta = newQty - oldQty
+ *     if delta < 0 → worker gave back materials → add |delta| to stock
+ *     if delta > 0 → worker took more → subtract delta from stock
+ */
 function saveHoldingEdit(wid){
-  const rows=[];
+  const newRows=[];
   document.querySelectorAll('#he-rows .he-row').forEach(row=>{
     const id=row.id.replace('he-row-','');
     const mat=(document.getElementById(`he-mat-${id}`)?.value||'').trim();
     const qty=parseFloat(document.getElementById(`he-qty-${id}`)?.value||0);
     const unit=(document.getElementById(`he-unit-${id}`)?.value||'').trim();
-    if(mat&&qty>0) rows.push({mat,qty,unit});
+    if(mat&&qty>0) newRows.push({mat,qty,unit});
   });
-  DB.update('workers',wid,{holdings:rows});
+
+  // Build maps: mat → qty
+  const oldMap = {};
+  _holdingEditOldSnapshot.forEach(h=>{ oldMap[h.mat]=(oldMap[h.mat]||0)+parseFloat(h.qty||0); });
+  const newMap = {};
+  newRows.forEach(h=>{ newMap[h.mat]=(newMap[h.mat]||0)+parseFloat(h.qty||0); });
+
+  // Gather all material names involved
+  const allMats = new Set([...Object.keys(oldMap),...Object.keys(newMap)]);
+  const adjustments = [];
+
+  allMats.forEach(mat=>{
+    const oldQty = oldMap[mat]||0;
+    const newQty = newMap[mat]||0;
+    const delta = newQty - oldQty; // positive = worker has more, negative = worker has less
+    if(Math.abs(delta) < 0.0001) return; // no change
+    // delta > 0 → stock decreases (worker holding more)
+    // delta < 0 → stock increases (worker holding less → returned)
+    const stockDelta = -delta;
+    DB.adjustStock(mat, stockDelta);
+    adjustments.push({mat, delta, stockDelta});
+  });
+
+  DB.update('workers',wid,{holdings:newRows});
   _holdingEditMode=false;
-  toast('Holdings updated');
+  _holdingEditOldSnapshot=[];
+
+  // Build feedback message
+  const msgs = adjustments.map(a=>{
+    if(a.stockDelta>0) return `+${fmtNum(a.stockDelta)} ${a.mat} returned to stock`;
+    if(a.stockDelta<0) return `-${fmtNum(Math.abs(a.stockDelta))} ${a.mat} deducted from stock`;
+  }).filter(Boolean);
+
+  toast(msgs.length ? `Holdings saved · ${msgs.join('; ')}` : 'Holdings updated (no stock change)');
   renderWorkerProfile();
+  renderMaterials();
   updateCounts();
 }
 
-/* ── Redesigned Issuance Timeline ── */
+/* ═══════════════════════════════════════════════════
+   RETURN TO STOCK — Searchable popup modal
+   ═══════════════════════════════════════════════════ */
+let _retStockWid = null;
+let _retStockRows = []; // [{mat, unit, maxQty, retQty}]
+
+function openReturnStockModal(wid){
+  _retStockWid = wid;
+  const worker = DB.find('workers', wid);
+  if(!worker){ toast('Worker not found','danger'); return; }
+  const holdings = worker.holdings||[];
+
+  document.getElementById('rs-worker-name').textContent = worker.name;
+  document.getElementById('rs-search').value = '';
+
+  _retStockRows = holdings.map(h=>({
+    mat: h.mat,
+    unit: h.unit,
+    maxQty: parseFloat(h.qty||0),
+    retQty: 0,
+  }));
+
+  _renderRetStockList('');
+
+  // Wire search
+  const srch = document.getElementById('rs-search');
+  const fresh = srch.cloneNode(true); srch.parentNode.replaceChild(fresh,srch);
+  document.getElementById('rs-search').addEventListener('input', e=>_renderRetStockList(e.target.value));
+
+  // Wire confirm button
+  const confirmBtn = document.getElementById('rs-confirm');
+  const cfresh = confirmBtn.cloneNode(true); confirmBtn.parentNode.replaceChild(cfresh,confirmBtn);
+  document.getElementById('rs-confirm').addEventListener('click', saveReturnStock);
+
+  openModal('modal-return-stock');
+  setTimeout(()=>document.getElementById('rs-search')?.focus(),150);
+}
+
+function _renderRetStockList(search){
+  const q = (search||'').toLowerCase();
+  const wrap = document.getElementById('rs-rows-body');
+  if(!wrap) return;
+
+  const filtered = _retStockRows.filter(r=>r.mat.toLowerCase().includes(q));
+
+  if(!filtered.length){
+    wrap.innerHTML = q
+      ? `<div class="t-empty" style="padding:1.5rem 0"><span class="t-empty-ico">🔍</span>No materials match "<em>${q}</em>"</div>`
+      : `<div class="t-empty" style="padding:1.5rem 0"><span class="t-empty-ico">📭</span>Worker is not holding any materials</div>`;
+    return;
+  }
+
+  wrap.innerHTML = filtered.map(r=>{
+    const globalIdx = _retStockRows.indexOf(r);
+    const pct = r.maxQty>0 ? Math.min(100,Math.round((r.retQty/r.maxQty)*100)) : 0;
+    return `
+      <div class="rs-row" id="rs-row-${globalIdx}">
+        <div class="rs-row-info">
+          <div class="rs-mat-name">${r.mat}</div>
+          <div class="rs-mat-holding">Holding: <strong>${fmtNum(r.maxQty)} ${r.unit}</strong></div>
+          <div class="rs-progress-bar"><div class="rs-progress-fill" id="rs-pbar-${globalIdx}" style="width:${pct}%"></div></div>
+        </div>
+        <div class="rs-row-input">
+          <div class="rs-qty-wrap">
+            <button class="rs-qty-btn" onclick="rsAdjQty(${globalIdx},-1)">−</button>
+            <input class="finput rs-qty-inp" id="rs-qty-${globalIdx}" type="number" min="0" max="${r.maxQty}" step="0.01" value="${r.retQty||''}" placeholder="0"
+              oninput="_onRetStockQtyChange(${globalIdx},this.value)"/>
+            <button class="rs-qty-btn" onclick="rsAdjQty(${globalIdx},1)">+</button>
+          </div>
+          <div class="rs-unit-tag">${r.unit}</div>
+          <button class="rs-all-btn" onclick="rsSetAll(${globalIdx})">All</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function _onRetStockQtyChange(idx, val){
+  const r = _retStockRows[idx]; if(!r)return;
+  r.retQty = Math.min(r.maxQty, Math.max(0, parseFloat(val)||0));
+  // update progress bar without full re-render
+  const pct = r.maxQty>0 ? Math.min(100,Math.round((r.retQty/r.maxQty)*100)) : 0;
+  const pb = document.getElementById(`rs-pbar-${idx}`);
+  if(pb) pb.style.width = pct+'%';
+  _updateRetStockSummary();
+}
+
+function rsAdjQty(idx, dir){
+  const r = _retStockRows[idx]; if(!r)return;
+  const step = r.maxQty >= 10 ? 1 : 0.1;
+  r.retQty = Math.min(r.maxQty, Math.max(0, parseFloat((r.retQty+(dir*step)).toFixed(3))));
+  const inp = document.getElementById(`rs-qty-${idx}`);
+  if(inp) inp.value = r.retQty||'';
+  const pct = r.maxQty>0 ? Math.min(100,Math.round((r.retQty/r.maxQty)*100)) : 0;
+  const pb = document.getElementById(`rs-pbar-${idx}`);
+  if(pb) pb.style.width = pct+'%';
+  _updateRetStockSummary();
+}
+
+function rsSetAll(idx){
+  const r = _retStockRows[idx]; if(!r)return;
+  r.retQty = r.maxQty;
+  const inp = document.getElementById(`rs-qty-${idx}`);
+  if(inp) inp.value = r.retQty;
+  const pb = document.getElementById(`rs-pbar-${idx}`);
+  if(pb) pb.style.width = '100%';
+  _updateRetStockSummary();
+}
+
+function _updateRetStockSummary(){
+  const toReturn = _retStockRows.filter(r=>r.retQty>0);
+  const sumEl = document.getElementById('rs-summary');
+  if(!sumEl)return;
+  if(!toReturn.length){
+    sumEl.innerHTML=`<span style="color:var(--text-light);font-size:0.78rem">Select quantities to return</span>`;
+    return;
+  }
+  sumEl.innerHTML=`<strong style="font-size:0.78rem;color:var(--text-primary)">Returning:</strong> `+
+    toReturn.map(r=>`<span class="badge badge-amber" style="font-size:0.7rem">${fmtNum(r.retQty)} ${r.unit} ${r.mat}</span>`).join(' ');
+}
+
+function saveReturnStock(){
+  const worker = DB.find('workers',_retStockWid); if(!worker)return;
+  const toReturn = _retStockRows.filter(r=>r.retQty>0);
+  if(!toReturn.length){ toast('Enter at least one quantity to return','warning'); return; }
+
+  const h = [...(worker.holdings||[])];
+  let n = 0;
+  toReturn.forEach(r=>{
+    const holding = h.find(x=>x.mat===r.mat);
+    if(holding){
+      const actualReturn = Math.min(parseFloat(holding.qty||0), r.retQty);
+      holding.qty = Math.max(0, parseFloat(holding.qty||0)-actualReturn);
+      DB.adjustStock(r.mat, actualReturn);
+      n++;
+    }
+  });
+
+  const remaining = h.filter(x=>parseFloat(x.qty||0)>0);
+  DB.update('workers',_retStockWid,{holdings:remaining});
+
+  closeModal('modal-return-stock');
+  renderWorkerProfile();
+  renderMaterials();
+  updateCounts();
+  toast(`${n} material(s) returned to stock — stock updated`);
+}
+
+/* ═══════════════════════════════════════════════════
+   EDIT ISSUANCE — Timeline card edit
+   ═══════════════════════════════════════════════════ */
+let _editIssId = null;
+let _editIssRows = [];
+
+function openEditIssuanceModal(issId){
+  _editIssId = issId;
+  const iss = DB.find('issuances', issId);
+  if(!iss){ toast('Issuance not found','danger'); return; }
+
+  document.getElementById('ei-worker-name').textContent = iss.workerName||'Unknown';
+  document.getElementById('ei-date').value = iss.date||todayStr();
+  document.getElementById('ei-notes').value = iss.notes||'';
+
+  _editIssRows = (iss.materials||[]).map(m=>({...m}));
+  _renderEditIssRows();
+
+  const addBtn = document.getElementById('ei-add-row');
+  const afresh = addBtn.cloneNode(true); addBtn.parentNode.replaceChild(afresh,addBtn);
+  document.getElementById('ei-add-row').addEventListener('click',()=>{
+    _editIssRows.push({mat:'',qty:0,unit:''});
+    _renderEditIssRows();
+  });
+
+  const saveBtn = document.getElementById('ei-save');
+  const sfresh = saveBtn.cloneNode(true); saveBtn.parentNode.replaceChild(sfresh,saveBtn);
+  document.getElementById('ei-save').addEventListener('click',saveEditIssuance);
+
+  openModal('modal-edit-issuance');
+}
+
+function _renderEditIssRows(){
+  const wrap = document.getElementById('ei-mat-rows'); if(!wrap)return;
+  if(!_editIssRows.length){
+    wrap.innerHTML=`<div style="text-align:center;padding:.7rem;border:1px dashed var(--border);border-radius:8px;font-size:0.78rem;color:var(--text-light)">No materials — click "+ Add Row"</div>`;
+    return;
+  }
+  const mats = DB.all('materials');
+  wrap.innerHTML=_editIssRows.map((r,i)=>`
+    <div class="mat-row" id="ei-row-${i}">
+      <div class="combo-wrap"><input class="finput" id="ei-mat-${i}" value="${r.mat||''}" placeholder="Material" autocomplete="off"/><div class="combo-drop" id="ei-mat-drop-${i}"></div></div>
+      <input class="finput" id="ei-qty-${i}" type="number" min="0" step="0.01" value="${r.qty||''}" placeholder="0"/>
+      <div class="combo-wrap"><input class="finput" id="ei-unit-${i}" value="${r.unit||''}" placeholder="unit" autocomplete="off"/><div class="combo-drop" id="ei-unit-drop-${i}"></div></div>
+      <button class="row-del" onclick="eiDelRow(${i})">×</button>
+    </div>`).join('');
+
+  _editIssRows.forEach((_,i)=>{
+    document.getElementById(`ei-mat-${i}`)?.addEventListener('input',e=>_editIssRows[i].mat=e.target.value);
+    document.getElementById(`ei-qty-${i}`)?.addEventListener('input',e=>_editIssRows[i].qty=parseFloat(e.target.value)||0);
+    document.getElementById(`ei-unit-${i}`)?.addEventListener('input',e=>_editIssRows[i].unit=e.target.value);
+    buildCombo(`ei-mat-${i}`,`ei-mat-drop-${i}`,mats.map(m=>m.name),val=>{
+      _editIssRows[i].mat=val;
+      const m=mats.find(m=>m.name===val);
+      if(m){ _editIssRows[i].unit=m.unit||''; const u=document.getElementById(`ei-unit-${i}`); if(u)u.value=m.unit||''; }
+    });
+    buildCombo(`ei-unit-${i}`,`ei-unit-drop-${i}`,DB.savedUnits(),val=>{ _editIssRows[i].unit=val; });
+  });
+}
+
+function eiDelRow(i){ _editIssRows.splice(i,1); _renderEditIssRows(); }
+
+/**
+ * saveEditIssuance:
+ *   1. Compute per-material delta between old issuance rows and new rows
+ *   2. Adjust worker holdings by delta
+ *   3. Adjust raw material stock by -delta (if worker got more → stock goes down)
+ *   4. Update the issuance record
+ */
+function saveEditIssuance(){
+  const iss = DB.find('issuances', _editIssId); if(!iss){ toast('Not found','danger'); return; }
+  const newDate = document.getElementById('ei-date').value;
+  const newNotes = document.getElementById('ei-notes').value.trim();
+  const newValid = _editIssRows.filter(r=>r.mat&&parseFloat(r.qty)>0);
+  if(!newValid.length){ toast('Add at least one material row','danger'); return; }
+
+  const oldRows = iss.materials||[];
+
+  // Build delta maps
+  const oldMap={}, newMap={};
+  oldRows.forEach(r=>{ oldMap[r.mat]=(oldMap[r.mat]||0)+parseFloat(r.qty||0); });
+  newValid.forEach(r=>{ newMap[r.mat]=(newMap[r.mat]||0)+parseFloat(r.qty||0); });
+
+  const allMats = new Set([...Object.keys(oldMap),...Object.keys(newMap)]);
+
+  // Get worker
+  const worker = iss.workerId ? DB.find('workers', iss.workerId) : null;
+  const holdings = worker ? [...(worker.holdings||[])] : null;
+
+  allMats.forEach(mat=>{
+    const oldQty = oldMap[mat]||0;
+    const newQty = newMap[mat]||0;
+    const delta = newQty - oldQty; // positive = more issued to worker
+    if(Math.abs(delta)<0.0001) return;
+
+    // Adjust stock: more issued → stock down; less issued → stock up
+    DB.adjustStock(mat, -delta);
+
+    // Adjust worker holdings if applicable
+    if(holdings){
+      const h = holdings.find(x=>x.mat===mat);
+      if(delta>0){
+        // issued more → increase holdings
+        if(h) h.qty = parseFloat(h.qty||0)+delta;
+        else {
+          const unit = newValid.find(r=>r.mat===mat)?.unit||oldRows.find(r=>r.mat===mat)?.unit||'';
+          holdings.push({mat, qty:delta, unit});
+        }
+      } else {
+        // issued less → decrease holdings
+        if(h){ h.qty = Math.max(0, parseFloat(h.qty||0)+delta); }
+      }
+    }
+  });
+
+  if(worker && holdings){
+    const remaining = holdings.filter(h=>parseFloat(h.qty||0)>0);
+    DB.update('workers', worker.id, {holdings:remaining});
+  }
+
+  DB.update('issuances', _editIssId, {
+    date: newDate,
+    notes: newNotes,
+    materials: newValid.map(r=>({mat:r.mat,qty:parseFloat(r.qty||0),unit:r.unit}))
+  });
+
+  closeModal('modal-edit-issuance');
+  renderWorkerProfile();
+  renderMaterials();
+  updateCounts();
+  toast('Issuance updated — stock & holdings balanced');
+}
+
+/* ── Redesigned Issuance Timeline with Edit button ── */
 function _renderIssuanceTimeline(issuances, worker){
   if(!issuances.length) return `
     <div class="card" style="margin-top:1.2rem">
@@ -841,17 +1164,14 @@ function _renderIssuanceTimeline(issuances, worker){
   const totalQtyByMat={};
   issuances.forEach(iss=>(iss.materials||[]).forEach(m=>{totalQtyByMat[m.mat]=(totalQtyByMat[m.mat]||0)+parseFloat(m.qty||0);}));
 
-  /* Summary chips */
   const summaryChips=Object.entries(totalQtyByMat).slice(0,6).map(([mat,qty])=>`
     <div class="tl2-summary-chip">
       <span class="tl2-sc-mat">${mat}</span>
       <span class="tl2-sc-qty">${fmtNum(qty)}</span>
     </div>`).join('');
 
-  /* Timeline cards */
   const cards=sorted.map((iss,idx)=>{
     const isFirst=idx===0;
-    const matTotal=(iss.materials||[]).reduce((s,m)=>s+parseFloat(m.qty||0),0);
     return `
       <div class="tl2-card ${isFirst?'tl2-card-latest':''}">
         <div class="tl2-card-top">
@@ -859,7 +1179,10 @@ function _renderIssuanceTimeline(issuances, worker){
             ${isFirst?'<span class="tl2-latest-badge">Latest</span>':''}
             <span class="tl2-date-text">${fmtDate(iss.date)}</span>
           </div>
-          <span class="tl2-item-count">${(iss.materials||[]).length} item${(iss.materials||[]).length>1?'s':''}</span>
+          <div style="display:flex;align-items:center;gap:0.35rem">
+            <span class="tl2-item-count">${(iss.materials||[]).length} item${(iss.materials||[]).length>1?'s':''}</span>
+            <button class="tl2-edit-btn" onclick="openEditIssuanceModal('${iss.id}')" title="Edit this issuance">✏️</button>
+          </div>
         </div>
         ${iss.notes?`<div class="tl2-note">💬 ${iss.notes}</div>`:''}
         <div class="tl2-mats">
@@ -976,7 +1299,7 @@ function saveIssuance(){
 }
 
 /* ═══════════════════════════════════════════════════
-   DIRECT RETURN (Worker → Stock)
+   DIRECT RETURN (legacy — kept for backward compat)
    ═══════════════════════════════════════════════════ */
 let _retWid=null;
 function openDirectReturn(wid){
@@ -1530,9 +1853,8 @@ function _onProductSearch(){
   const resEl=document.getElementById('fsl-serial-results'); if(!resEl)return;
   if(!q){resEl.innerHTML='';return;}
   const unsold=DB.all('finished').filter(f=>{
-    if(_cartItems.find(c=>c.fgId===f.id)) return false; // already in cart
+    if(_cartItems.find(c=>c.fgId===f.id)) return false;
     if(!f.sold) return true;
-    // In edit mode: allow items that belong to the bill being edited
     if(_editSaleId && f.saleId===_editSaleId) return true;
     return false;
   });
@@ -1609,7 +1931,6 @@ function saveSalesBill(){
   const taxAmt=subtotal*taxPct/100, totalAmount=subtotal+taxAmt;
   const buyerType=document.getElementById('fsl-buyer-type').value;
 
-  /* ── Edit mode: un-mark all items from the old bill, then delete old bill ── */
   if(_editSaleId){
     const oldSale = DB.find('sales', _editSaleId);
     if(oldSale){
@@ -1883,6 +2204,70 @@ function createModals(){
     </div>
   </div>
 
+  <!-- ══════════════════════════════════════
+       NEW: Return to Stock (searchable)
+       ══════════════════════════════════════ -->
+  <div class="modal-backdrop" id="modal-return-stock">
+    <div class="modal modal-lg">
+      <div class="modal-hdr">
+        <div>
+          <h3 class="modal-title">↩ Return Materials to Stock</h3>
+          <p class="modal-sub">Worker: <strong id="rs-worker-name"></strong></p>
+        </div>
+        <button class="modal-close" onclick="closeModal('modal-return-stock')">×</button>
+      </div>
+      <div class="modal-body" style="gap:0.7rem">
+        <div class="field-group">
+          <label>Search Material</label>
+          <div class="search-wrap" style="max-width:100%">
+            <span class="search-ico">⌕</span>
+            <input type="text" class="search-input" id="rs-search" placeholder="Filter materials…" style="width:100%;max-width:100%"/>
+          </div>
+        </div>
+        <div id="rs-rows-body" style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:0.5rem;padding-right:0.2rem"></div>
+        <div id="rs-summary" style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;padding:0.6rem 0.75rem;background:var(--amber-pale);border-radius:8px;border:1px solid var(--amber-light);min-height:38px">
+          <span style="color:var(--text-light);font-size:0.78rem">Select quantities to return</span>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="closeModal('modal-return-stock')">Cancel</button>
+        <button class="btn btn-primary" id="rs-confirm">↩ Return to Stock</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       NEW: Edit Issuance
+       ══════════════════════════════════════ -->
+  <div class="modal-backdrop" id="modal-edit-issuance">
+    <div class="modal modal-lg">
+      <div class="modal-hdr">
+        <div>
+          <h3 class="modal-title">✏️ Edit Issuance</h3>
+          <p class="modal-sub">Worker: <strong id="ei-worker-name"></strong> · Stock &amp; holdings auto-balanced on save</p>
+        </div>
+        <button class="modal-close" onclick="closeModal('modal-edit-issuance')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="banner banner-info" style="margin-bottom:0.7rem;font-size:0.77rem">
+          <span class="banner-ico">⚖️</span>
+          <div>Changes are automatically applied to <strong>worker holdings</strong> and <strong>raw material stock</strong> — only the delta is adjusted.</div>
+        </div>
+        <div class="form-row">
+          <div class="field-group"><label>Date</label><input class="finput" id="ei-date" type="date"/></div>
+          <div class="field-group"><label>Notes</label><input class="finput" id="ei-notes" type="text" placeholder="Optional…"/></div>
+        </div>
+        <div class="mat-recipe-hdr"><span>Material</span><span>Qty</span><span>Unit</span><span></span></div>
+        <div id="ei-mat-rows"></div>
+        <button class="add-row-btn" id="ei-add-row">+ Add Row</button>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="closeModal('modal-edit-issuance')">Cancel</button>
+        <button class="btn btn-primary" id="ei-save">💾 Save &amp; Balance</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="modal-sales">
     <div class="modal modal-lg"><div class="modal-hdr"><div><h3 class="modal-title">New Sales Bill</h3><p class="modal-sub">Search by product name — select serial numbers to add to cart</p></div><button class="modal-close" onclick="closeModal('modal-sales')">×</button></div>
     <div class="modal-body">
@@ -1940,8 +2325,6 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('mat-save')?.addEventListener('click',saveMat);
 
   document.getElementById('sup-search')?.addEventListener('input',renderSuppliers);
-  /* NOTE: sup-add-row and sup-save are wired inside openSupModal() each time
-     the modal opens, to avoid stale closures and double-fire issues. */
 
   document.getElementById('worker-search')?.addEventListener('input',renderWorkers);
   document.querySelectorAll('#worker-pills .tpill').forEach(b=>b.addEventListener('click',()=>{ document.querySelectorAll('#worker-pills .tpill').forEach(x=>x.classList.remove('active')); b.classList.add('active'); _workerFilter=b.dataset.val; renderWorkers(); }));
