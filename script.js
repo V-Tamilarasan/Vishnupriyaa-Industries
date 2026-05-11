@@ -1,4 +1,4 @@
-'use strict';
+
 /* ═══════════════════════════════════════════════════
    DB  — collections: materials bills workers templates issuances productions finished sales
    ═══════════════════════════════════════════════════ */
@@ -703,7 +703,7 @@ function _renderHoldingsView(holdings){
 
 /* ── Holdings edit mode — NOW BALANCES STOCK ── */
 let _holdingEditMode = false;
-let _holdingEditOldSnapshot = []; // snapshot before editing
+let _holdingEditOldSnapshot = [];
 
 function toggleHoldingEdit(wid){
   _holdingEditMode = !_holdingEditMode;
@@ -713,7 +713,6 @@ function toggleHoldingEdit(wid){
   const btn  = document.getElementById('wp-holding-edit-btn');
   if(!body) return;
   if(_holdingEditMode){
-    // Take snapshot of current holdings before editing
     _holdingEditOldSnapshot = JSON.parse(JSON.stringify(worker.holdings||[]));
     btn.textContent='✕ Cancel';
     btn.style.background='var(--danger-light)';
@@ -811,14 +810,6 @@ function heDelRow(i){
   if(el) el.remove();
 }
 
-/**
- * saveHoldingEdit — saves new holdings AND auto-balances raw material stock.
- * Logic:
- *   For each material that appears in old OR new holdings:
- *     delta = newQty - oldQty
- *     if delta < 0 → worker gave back materials → add |delta| to stock
- *     if delta > 0 → worker took more → subtract delta from stock
- */
 function saveHoldingEdit(wid){
   const newRows=[];
   document.querySelectorAll('#he-rows .he-row').forEach(row=>{
@@ -829,23 +820,19 @@ function saveHoldingEdit(wid){
     if(mat&&qty>0) newRows.push({mat,qty,unit});
   });
 
-  // Build maps: mat → qty
   const oldMap = {};
   _holdingEditOldSnapshot.forEach(h=>{ oldMap[h.mat]=(oldMap[h.mat]||0)+parseFloat(h.qty||0); });
   const newMap = {};
   newRows.forEach(h=>{ newMap[h.mat]=(newMap[h.mat]||0)+parseFloat(h.qty||0); });
 
-  // Gather all material names involved
   const allMats = new Set([...Object.keys(oldMap),...Object.keys(newMap)]);
   const adjustments = [];
 
   allMats.forEach(mat=>{
     const oldQty = oldMap[mat]||0;
     const newQty = newMap[mat]||0;
-    const delta = newQty - oldQty; // positive = worker has more, negative = worker has less
-    if(Math.abs(delta) < 0.0001) return; // no change
-    // delta > 0 → stock decreases (worker holding more)
-    // delta < 0 → stock increases (worker holding less → returned)
+    const delta = newQty - oldQty;
+    if(Math.abs(delta) < 0.0001) return;
     const stockDelta = -delta;
     DB.adjustStock(mat, stockDelta);
     adjustments.push({mat, delta, stockDelta});
@@ -855,7 +842,6 @@ function saveHoldingEdit(wid){
   _holdingEditMode=false;
   _holdingEditOldSnapshot=[];
 
-  // Build feedback message
   const msgs = adjustments.map(a=>{
     if(a.stockDelta>0) return `+${fmtNum(a.stockDelta)} ${a.mat} returned to stock`;
     if(a.stockDelta<0) return `-${fmtNum(Math.abs(a.stockDelta))} ${a.mat} deducted from stock`;
@@ -871,7 +857,7 @@ function saveHoldingEdit(wid){
    RETURN TO STOCK — Searchable popup modal
    ═══════════════════════════════════════════════════ */
 let _retStockWid = null;
-let _retStockRows = []; // [{mat, unit, maxQty, retQty}]
+let _retStockRows = [];
 
 function openReturnStockModal(wid){
   _retStockWid = wid;
@@ -891,12 +877,10 @@ function openReturnStockModal(wid){
 
   _renderRetStockList('');
 
-  // Wire search
   const srch = document.getElementById('rs-search');
   const fresh = srch.cloneNode(true); srch.parentNode.replaceChild(fresh,srch);
   document.getElementById('rs-search').addEventListener('input', e=>_renderRetStockList(e.target.value));
 
-  // Wire confirm button
   const confirmBtn = document.getElementById('rs-confirm');
   const cfresh = confirmBtn.cloneNode(true); confirmBtn.parentNode.replaceChild(cfresh,confirmBtn);
   document.getElementById('rs-confirm').addEventListener('click', saveReturnStock);
@@ -946,7 +930,6 @@ function _renderRetStockList(search){
 function _onRetStockQtyChange(idx, val){
   const r = _retStockRows[idx]; if(!r)return;
   r.retQty = Math.min(r.maxQty, Math.max(0, parseFloat(val)||0));
-  // update progress bar without full re-render
   const pct = r.maxQty>0 ? Math.min(100,Math.round((r.retQty/r.maxQty)*100)) : 0;
   const pb = document.getElementById(`rs-pbar-${idx}`);
   if(pb) pb.style.width = pct+'%';
@@ -1076,13 +1059,6 @@ function _renderEditIssRows(){
 
 function eiDelRow(i){ _editIssRows.splice(i,1); _renderEditIssRows(); }
 
-/**
- * saveEditIssuance:
- *   1. Compute per-material delta between old issuance rows and new rows
- *   2. Adjust worker holdings by delta
- *   3. Adjust raw material stock by -delta (if worker got more → stock goes down)
- *   4. Update the issuance record
- */
 function saveEditIssuance(){
   const iss = DB.find('issuances', _editIssId); if(!iss){ toast('Not found','danger'); return; }
   const newDate = document.getElementById('ei-date').value;
@@ -1092,38 +1068,32 @@ function saveEditIssuance(){
 
   const oldRows = iss.materials||[];
 
-  // Build delta maps
   const oldMap={}, newMap={};
   oldRows.forEach(r=>{ oldMap[r.mat]=(oldMap[r.mat]||0)+parseFloat(r.qty||0); });
   newValid.forEach(r=>{ newMap[r.mat]=(newMap[r.mat]||0)+parseFloat(r.qty||0); });
 
   const allMats = new Set([...Object.keys(oldMap),...Object.keys(newMap)]);
 
-  // Get worker
   const worker = iss.workerId ? DB.find('workers', iss.workerId) : null;
   const holdings = worker ? [...(worker.holdings||[])] : null;
 
   allMats.forEach(mat=>{
     const oldQty = oldMap[mat]||0;
     const newQty = newMap[mat]||0;
-    const delta = newQty - oldQty; // positive = more issued to worker
+    const delta = newQty - oldQty;
     if(Math.abs(delta)<0.0001) return;
 
-    // Adjust stock: more issued → stock down; less issued → stock up
     DB.adjustStock(mat, -delta);
 
-    // Adjust worker holdings if applicable
     if(holdings){
       const h = holdings.find(x=>x.mat===mat);
       if(delta>0){
-        // issued more → increase holdings
         if(h) h.qty = parseFloat(h.qty||0)+delta;
         else {
           const unit = newValid.find(r=>r.mat===mat)?.unit||oldRows.find(r=>r.mat===mat)?.unit||'';
           holdings.push({mat, qty:delta, unit});
         }
       } else {
-        // issued less → decrease holdings
         if(h){ h.qty = Math.max(0, parseFloat(h.qty||0)+delta); }
       }
     }
@@ -1299,7 +1269,7 @@ function saveIssuance(){
 }
 
 /* ═══════════════════════════════════════════════════
-   DIRECT RETURN (legacy — kept for backward compat)
+   DIRECT RETURN (legacy)
    ═══════════════════════════════════════════════════ */
 let _retWid=null;
 function openDirectReturn(wid){
@@ -1644,6 +1614,72 @@ function saveProduction(){
 }
 
 /* ═══════════════════════════════════════════════════
+   DELETE PRODUCTION LOG ENTRY
+   Returns materials to worker holdings + removes finished goods
+   ═══════════════════════════════════════════════════ */
+function deleteProduction(prodId){
+  const prod = DB.find('productions', prodId);
+  if(!prod){ toast('Production not found','danger'); return; }
+
+  const serials = prod.serialNumbers || [prod.serialNumber].filter(Boolean);
+  const soldSerials = serials.filter(sn=>{
+    const fg = DB.all('finished').find(f=>f.serialNumber===sn && f.productionId===prodId);
+    return fg?.sold;
+  });
+
+  if(soldSerials.length){
+    toast(`Cannot delete — ${soldSerials.length} piece(s) already sold: ${soldSerials.join(', ')}`, 'danger');
+    return;
+  }
+
+  const pieces = prod.piecesCount || 1;
+  const confirmMsg = `Delete production batch?\n\n` +
+    `Product: ${prod.product}\n` +
+    `Worker: ${prod.workerName}\n` +
+    `Pieces: ${pieces}\n` +
+    `Serials: ${serials.join(', ')}\n\n` +
+    `Materials used (per piece) will be returned to the worker's holdings.\n` +
+    `Finished goods records will be removed.`;
+
+  if(!confirm(confirmMsg)) return;
+
+  // Return materials back to worker holdings
+  const worker = prod.workerId ? DB.find('workers', prod.workerId) : null;
+  if(worker && (prod.materialsUsed||[]).length){
+    const holdings = [...(worker.holdings||[])];
+    prod.materialsUsed.forEach(u=>{
+      const returnQty = parseFloat(u.qty||0) * pieces;
+      const h = holdings.find(h=>h.mat===u.mat);
+      if(h){
+        h.qty = parseFloat(h.qty||0) + returnQty;
+      } else {
+        holdings.push({ mat:u.mat, qty:returnQty, unit:u.unit||'' });
+      }
+    });
+    // Reverse worker stats
+    const newJobs  = Math.max(0, (worker.totalJobs||0) - pieces);
+    const newEarned = Math.max(0, (worker.totalEarned||0) - parseFloat(prod.totalWage||0));
+    DB.update('workers', worker.id, { holdings, totalJobs:newJobs, totalEarned:newEarned });
+  }
+
+  // Remove finished goods records for this production
+  serials.forEach(sn=>{
+    const fg = DB.all('finished').find(f=>f.serialNumber===sn && f.productionId===prodId);
+    if(fg) DB.delete('finished', fg.id);
+  });
+
+  // Delete the production record
+  DB.delete('productions', prodId);
+
+  renderProductions();
+  renderFinished();
+  renderWorkers();
+  updateCounts();
+  if(document.getElementById('page-worker-profile')?.classList.contains('active')) renderWorkerProfile();
+  toast(`Production batch deleted — materials returned to ${prod.workerName||'worker'}`, 'warning');
+}
+
+/* ═══════════════════════════════════════════════════
    PRODUCTION LOG
    ═══════════════════════════════════════════════════ */
 function renderProductions(){
@@ -1683,6 +1719,8 @@ function renderProductions(){
         const wagePerPc=parseFloat(p.wagePerPiece||0)||(parseFloat(p.totalWage||0)/pieces);
         const grandCostPc=totalCostPc+wagePerPc;
         const ohTitle=(p.overheadsSnapshot||[]).map(o=>`${o.label}: ${fmtMoney(o.amount)}`).join('\n');
+        // Check if any serial is sold
+        const anySold = serials.some(sn=>DB.all('finished').find(f=>f.serialNumber===sn&&f.productionId===p.id)?.sold);
         return `
         <div class="prod-card">
           <div class="prod-card-left">
@@ -1690,7 +1728,10 @@ function renderProductions(){
           </div>
           <div class="prod-card-body">
             <div class="prod-card-top">
-              <div class="prod-card-title">${p.product}</div>
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:0.5rem">
+                <div class="prod-card-title">${p.product}</div>
+                <button class="act-btn danger" style="flex-shrink:0;font-size:0.72rem;padding:0.25rem 0.5rem" onclick="deleteProduction('${p.id}')" title="${anySold?'Some pieces sold — cannot fully delete':'Delete production batch'}">🗑 Delete</button>
+              </div>
               <div class="prod-card-meta">
                 <span class="prod-meta-chip prod-chip-worker" onclick="nav('worker-profile','${p.workerId}')">
                   <span class="pmc-icon">👷</span>${p.workerName}
@@ -1824,7 +1865,7 @@ function openSalesModal(preloadFgId=null, editSaleId=null){
       (sl.items||[]).forEach(it=>{
         const fg = DB.find('finished', it.fgId);
         if(fg){
-          _cartItems.push({fgId:it.fgId,product:it.product,serialNumber:it.serialNumber,workerName:it.workerName,date:fg.date,matCostPerPiece:parseFloat(it.matCostPerPiece||0),totalWage:parseFloat(it.totalWage||0),price:parseFloat(it.price||0)});
+          _cartItems.push({fgId:it.fgId,product:it.product,serialNumber:it.serialNumber,workerName:it.workerName,date:fg.date,matCostPerPiece:parseFloat(it.matCostPerPiece||0),ohCostPerPiece:parseFloat(it.ohCostPerPiece||fg.ohCostPerPiece||0),totalWage:parseFloat(it.totalWage||0),price:parseFloat(it.price||0)});
         }
       });
       const titleEl=document.querySelector('#modal-sales .modal-title');
@@ -1867,14 +1908,17 @@ function _onProductSearch(){
   resEl.innerHTML=Object.entries(grouped).map(([name,items])=>`
     <div style="margin-bottom:0.6rem">
       <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary);padding:0.2rem 0;margin-bottom:0.2rem">${name} · ${items.length} available</div>
-      ${items.map(fg=>`<div style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.65rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:7px;margin-bottom:0.25rem">
-        <div style="flex:1;min-width:0">
-          <span style="font-family:var(--font-mono);font-size:0.8rem;font-weight:600;color:var(--text-primary)">SN: ${fg.serialNumber}</span>
-          <span style="font-size:0.72rem;color:var(--text-tertiary);margin-left:0.5rem">👷 ${fg.workerName} · ${fmtDate(fg.date)}</span>
-          ${(parseFloat(fg.matCostPerPiece||0)+parseFloat(fg.totalWage||0))>0?`<div style="font-size:0.69rem;color:var(--amber-dark)">Internal cost: ${fmtMoney(parseFloat(fg.matCostPerPiece||0)+parseFloat(fg.totalWage||0))}</div>`:''}
-        </div>
-        <button onclick="_addToCart_byId('${fg.id}')" class="sn-add-btn" title="Add to bill">+</button>
-      </div>`).join('')}
+      ${items.map(fg=>{
+        const internalCost = parseFloat(fg.matCostPerPiece||0) + parseFloat(fg.ohCostPerPiece||0) + parseFloat(fg.totalWage||0);
+        return `<div style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.65rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:7px;margin-bottom:0.25rem">
+          <div style="flex:1;min-width:0">
+            <span style="font-family:var(--font-mono);font-size:0.8rem;font-weight:600;color:var(--text-primary)">SN: ${fg.serialNumber}</span>
+            <span style="font-size:0.72rem;color:var(--text-tertiary);margin-left:0.5rem">👷 ${fg.workerName} · ${fmtDate(fg.date)}</span>
+            ${internalCost>0?`<div style="font-size:0.69rem;color:var(--amber-dark)">Internal cost: ${fmtMoney(internalCost)}</div>`:''}
+          </div>
+          <button onclick="_addToCart_byId('${fg.id}')" class="sn-add-btn" title="Add to bill">+</button>
+        </div>`;
+      }).join('')}
     </div>`).join('');
 }
 
@@ -1882,7 +1926,17 @@ function _addToCart_byId(fgId){ const fg=DB.find('finished',fgId); if(fg)_addToC
 
 function _addToCart(fg){
   if(_cartItems.find(c=>c.fgId===fg.id)){toast('Already in cart','warning');return;}
-  _cartItems.push({fgId:fg.id,product:fg.product,serialNumber:fg.serialNumber,workerName:fg.workerName,date:fg.date,matCostPerPiece:parseFloat(fg.matCostPerPiece||0),totalWage:parseFloat(fg.totalWage||0),price:0});
+  _cartItems.push({
+    fgId:fg.id,
+    product:fg.product,
+    serialNumber:fg.serialNumber,
+    workerName:fg.workerName,
+    date:fg.date,
+    matCostPerPiece:parseFloat(fg.matCostPerPiece||0),
+    ohCostPerPiece:parseFloat(fg.ohCostPerPiece||0),
+    totalWage:parseFloat(fg.totalWage||0),
+    price:0
+  });
   _onProductSearch(); _renderCart();
   toast(`Added: ${fg.product} (${fg.serialNumber})`);
 }
@@ -1897,15 +1951,23 @@ function _renderCart(){
   }
   wrap.innerHTML=`<div style="border:1px solid var(--border);border-radius:9px;overflow:hidden">
     <div style="display:grid;grid-template-columns:1fr 130px 28px;gap:0.4rem;padding:0.4rem 0.75rem;background:var(--bg-secondary);font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary)"><span>Product · Serial</span><span>Sale Price ₹</span><span></span></div>
-    ${_cartItems.map((it,i)=>`<div style="display:grid;grid-template-columns:1fr 130px 28px;gap:0.4rem;padding:0.5rem 0.75rem;align-items:center;border-top:1px solid var(--border-light)">
-      <div>
-        <div style="font-weight:600;font-size:0.83rem">${it.product}</div>
-        <div style="font-family:var(--font-mono);font-size:0.7rem;color:var(--text-tertiary)">SN: ${it.serialNumber} · ${it.workerName}</div>
-        ${(it.matCostPerPiece+it.totalWage)>0?`<div style="font-size:0.68rem;color:var(--amber-dark)">Cost: ${fmtMoney(it.matCostPerPiece+it.totalWage)}</div>`:''}
-      </div>
-      <input class="finput" id="cart-price-${i}" type="number" min="0" step="0.01" value="${it.price||''}" placeholder="0.00" style="text-align:right;font-weight:600"/>
-      <button class="row-del" onclick="removeFromCart(${i})">×</button>
-    </div>`).join('')}
+    ${_cartItems.map((it,i)=>{
+      const totalInternalCost = it.matCostPerPiece + it.ohCostPerPiece + it.totalWage;
+      return `<div style="display:grid;grid-template-columns:1fr 130px 28px;gap:0.4rem;padding:0.5rem 0.75rem;align-items:center;border-top:1px solid var(--border-light)">
+        <div>
+          <div style="font-weight:600;font-size:0.83rem">${it.product}</div>
+          <div style="font-family:var(--font-mono);font-size:0.7rem;color:var(--text-tertiary)">SN: ${it.serialNumber} · ${it.workerName}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:0.3rem 0.75rem;margin-top:0.2rem">
+            ${it.matCostPerPiece>0?`<span style="font-size:0.68rem;color:var(--amber-dark)">📦 Mat: ${fmtMoney(it.matCostPerPiece)}</span>`:''}
+            ${it.ohCostPerPiece>0?`<span style="font-size:0.68rem;color:var(--info)">💡 OH: ${fmtMoney(it.ohCostPerPiece)}</span>`:''}
+            ${it.totalWage>0?`<span style="font-size:0.68rem;color:var(--text-tertiary)">💳 Wage: ${fmtMoney(it.totalWage)}</span>`:''}
+            ${totalInternalCost>0?`<span style="font-size:0.68rem;font-weight:700;color:var(--text-primary);background:var(--amber-pale);padding:0.05rem 0.35rem;border-radius:4px;border:1px solid var(--amber-light)">Total cost: ${fmtMoney(totalInternalCost)}</span>`:''}
+          </div>
+        </div>
+        <input class="finput" id="cart-price-${i}" type="number" min="0" step="0.01" value="${it.price||''}" placeholder="0.00" style="text-align:right;font-weight:600"/>
+        <button class="row-del" onclick="removeFromCart(${i})">×</button>
+      </div>`;
+    }).join('')}
   </div>`;
   _cartItems.forEach((_,i)=>{ document.getElementById(`cart-price-${i}`)?.addEventListener('input',e=>{ _cartItems[i].price=parseFloat(e.target.value)||0; _recalcTotals(); }); });
   if(totWrap)totWrap.style.display=''; _recalcTotals();
@@ -1943,7 +2005,7 @@ function saveSalesBill(){
     billno:document.getElementById('fsl-billno').value.trim(), date, buyerType, buyerName,
     buyerPhone:document.getElementById('fsl-buyer-phone').value.trim(),
     buyerAddr:document.getElementById('fsl-buyer-addr').value.trim(),
-    items:_cartItems.map(it=>({fgId:it.fgId,product:it.product,serialNumber:it.serialNumber,workerName:it.workerName,matCostPerPiece:it.matCostPerPiece,totalWage:it.totalWage,price:it.price})),
+    items:_cartItems.map(it=>({fgId:it.fgId,product:it.product,serialNumber:it.serialNumber,workerName:it.workerName,matCostPerPiece:it.matCostPerPiece,ohCostPerPiece:it.ohCostPerPiece,totalWage:it.totalWage,price:it.price})),
     subtotal, taxPct, taxAmt, totalAmount,
     product:_cartItems.map(it=>it.product).join(', '),
     serialNumber:_cartItems.map(it=>it.serialNumber).join(', ')
@@ -1983,7 +2045,22 @@ function renderSales(){
         </div>
       </div>
       <div style="padding:0.3rem 1rem 0.6rem;border-top:1px solid var(--border-light)">
-        ${items.map(it=>`<div class="iss-mat-row"><div><span class="imr-name">${it.product}</span> <span style="font-family:var(--font-mono);font-size:0.7rem;color:var(--text-tertiary)">SN:${it.serialNumber}</span></div><span class="imr-qty" style="font-weight:600">${fmtMoney(it.price||0)}</span></div>`).join('')}
+        ${items.map(it=>{
+          const internalCost = parseFloat(it.matCostPerPiece||0) + parseFloat(it.ohCostPerPiece||0) + parseFloat(it.totalWage||0);
+          return `<div class="iss-mat-row">
+            <div>
+              <span class="imr-name">${it.product}</span>
+              <span style="font-family:var(--font-mono);font-size:0.7rem;color:var(--text-tertiary);margin-left:0.4rem">SN:${it.serialNumber}</span>
+              ${internalCost>0?`<div style="font-size:0.68rem;margin-top:0.1rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+                ${parseFloat(it.matCostPerPiece||0)>0?`<span style="color:var(--amber-dark)">📦 ${fmtMoney(it.matCostPerPiece)}</span>`:''}
+                ${parseFloat(it.ohCostPerPiece||0)>0?`<span style="color:var(--info)">💡 ${fmtMoney(it.ohCostPerPiece)}</span>`:''}
+                ${parseFloat(it.totalWage||0)>0?`<span style="color:var(--text-tertiary)">💳 ${fmtMoney(it.totalWage)}</span>`:''}
+                <span style="font-weight:700;color:var(--text-primary)">Cost: ${fmtMoney(internalCost)}</span>
+              </div>`:''}
+            </div>
+            <span class="imr-qty" style="font-weight:600">${fmtMoney(it.price||0)}</span>
+          </div>`;
+        }).join('')}
       </div>
       <div class="wo-card-foot"><div class="acts">
         <button class="btn btn-ghost btn-sm" onclick="openSalesModal(null,'${sl.id}')">✏️ Edit</button>
@@ -2204,9 +2281,6 @@ function createModals(){
     </div>
   </div>
 
-  <!-- ══════════════════════════════════════
-       NEW: Return to Stock (searchable)
-       ══════════════════════════════════════ -->
   <div class="modal-backdrop" id="modal-return-stock">
     <div class="modal modal-lg">
       <div class="modal-hdr">
@@ -2236,9 +2310,6 @@ function createModals(){
     </div>
   </div>
 
-  <!-- ══════════════════════════════════════
-       NEW: Edit Issuance
-       ══════════════════════════════════════ -->
   <div class="modal-backdrop" id="modal-edit-issuance">
     <div class="modal modal-lg">
       <div class="modal-hdr">
