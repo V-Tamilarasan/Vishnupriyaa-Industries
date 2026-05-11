@@ -690,6 +690,52 @@ function renderWorkerProfile(){
         </table>`:'<div class="t-empty"><span class="t-empty-ico">🏭</span>No production yet</div>'}
       </div>
     </div>
+
+    ${(()=>{
+      /* ── Material Issuance Timeline ── */
+      const issuances = DB.where('issuances', i => i.workerId === wid || i.workerName === worker.name);
+      if(!issuances.length) return '';
+      /* Sort chronologically oldest→newest */
+      const sorted = [...issuances].sort((a,b)=> new Date(a.date+'T00:00:00') - new Date(b.date+'T00:00:00'));
+      /* Group by date */
+      const byDate = {};
+      sorted.forEach(iss=>{ const d=iss.date||'unknown'; if(!byDate[d])byDate[d]=[]; byDate[d].push(iss); });
+      const totalMatsIssued = issuances.reduce((s,i)=>s+(i.materials||[]).length,0);
+      const timelineHTML = Object.entries(byDate).map(([date, entries])=>`
+        <div class="tl-day">
+          <div class="tl-date-col">
+            <div class="tl-date-badge">${fmtDate(date)}</div>
+          </div>
+          <div class="tl-events">
+            ${entries.map(iss=>`
+              <div class="tl-event">
+                <div class="tl-event-dot"></div>
+                <div class="tl-event-body">
+                  <div class="tl-event-title">📦 Materials Issued</div>
+                  ${iss.notes?`<div class="tl-event-note">💬 ${iss.notes}</div>`:''}
+                  <div class="tl-mats-grid">
+                    ${(iss.materials||[]).map(m=>`
+                      <div class="tl-mat-chip">
+                        <span class="tl-mat-name">${m.mat}</span>
+                        <span class="tl-mat-qty">${fmtNum(m.qty)} ${m.unit}</span>
+                      </div>`).join('')}
+                  </div>
+                </div>
+              </div>`).join('')}
+          </div>
+        </div>`).join('');
+      return `
+        <div class="card" style="margin-top:1.2rem;border-color:var(--amber-light)">
+          <div class="card-hdr" style="background:var(--amber-pale)">
+            <span class="card-title" style="color:var(--amber-dark)">📅 Material Issuance Timeline</span>
+            <span style="font-size:0.72rem;font-family:var(--font-mono);color:var(--amber-dark)">${issuances.length} issuance${issuances.length>1?'s':''} · ${totalMatsIssued} material line${totalMatsIssued>1?'s':''}</span>
+          </div>
+          <div class="card-body" style="padding:1rem 1.2rem">
+            <div class="tl-container">${timelineHTML}</div>
+          </div>
+        </div>`;
+    })()}
+
   </div>`;
 }
 
@@ -1271,23 +1317,51 @@ function deleteFG(id){ if(!confirm('Delete this record?'))return; DB.delete('fin
    SALES
    ═══════════════════════════════════════════════════ */
 let _cartItems = [];
+let _editSaleId = null;
 
-function openSalesModal(preloadFgId=null){
+function openSalesModal(preloadFgId=null, editSaleId=null){
   _cartItems = [];
+  _editSaleId = editSaleId || null;
   ['fsl-buyer-name','fsl-buyer-phone','fsl-buyer-addr','fsl-billno'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('fsl-date').value = todayStr();
   document.getElementById('fsl-buyer-type').value = 'Shop';
   document.getElementById('fsl-tax-pct').value = '0';
   document.getElementById('fsl-prod-search').value = '';
   document.getElementById('fsl-serial-results').innerHTML = '';
+
+  if(editSaleId){
+    const sl = DB.find('sales', editSaleId);
+    if(sl){
+      document.getElementById('fsl-buyer-name').value  = sl.buyerName||'';
+      document.getElementById('fsl-buyer-phone').value = sl.buyerPhone||'';
+      document.getElementById('fsl-buyer-addr').value  = sl.buyerAddr||'';
+      document.getElementById('fsl-billno').value      = sl.billno||'';
+      document.getElementById('fsl-date').value        = sl.date||todayStr();
+      document.getElementById('fsl-buyer-type').value  = sl.buyerType||'Shop';
+      document.getElementById('fsl-tax-pct').value     = sl.taxPct||0;
+      (sl.items||[]).forEach(it=>{
+        const fg = DB.find('finished', it.fgId);
+        if(fg){
+          _cartItems.push({fgId:it.fgId,product:it.product,serialNumber:it.serialNumber,workerName:it.workerName,date:fg.date,matCostPerPiece:parseFloat(it.matCostPerPiece||0),totalWage:parseFloat(it.totalWage||0),price:parseFloat(it.price||0)});
+        }
+      });
+      const titleEl=document.querySelector('#modal-sales .modal-title');
+      if(titleEl) titleEl.textContent='Edit Sales Bill';
+    }
+  } else {
+    const titleEl=document.querySelector('#modal-sales .modal-title');
+    if(titleEl) titleEl.textContent='New Sales Bill';
+  }
+
   _renderCart();
-  if(preloadFgId){ const fg=DB.find('finished',preloadFgId); if(fg&&!fg.sold) _addToCart(fg); }
+  if(preloadFgId && !editSaleId){ const fg=DB.find('finished',preloadFgId); if(fg&&!fg.sold) _addToCart(fg); }
   const psEl=document.getElementById('fsl-prod-search'), psCl=psEl.cloneNode(true); psEl.parentNode.replaceChild(psCl,psEl);
   document.getElementById('fsl-prod-search').addEventListener('input',_onProductSearch);
   const txEl=document.getElementById('fsl-tax-pct'), txCl=txEl.cloneNode(true); txEl.parentNode.replaceChild(txCl,txEl);
   document.getElementById('fsl-tax-pct').addEventListener('input',_recalcTotals);
   const btn=document.getElementById('sl-save'), cl=btn.cloneNode(true); btn.parentNode.replaceChild(cl,btn);
   document.getElementById('sl-save').addEventListener('click',saveSalesBill);
+  document.getElementById('sl-save').textContent = editSaleId ? '💾 Update Bill' : '🧾 Save Bill';
   openModal('modal-sales');
   setTimeout(()=>document.getElementById('fsl-prod-search')?.focus(),150);
 }
@@ -1296,7 +1370,13 @@ function _onProductSearch(){
   const q=(document.getElementById('fsl-prod-search')?.value||'').toLowerCase().trim();
   const resEl=document.getElementById('fsl-serial-results'); if(!resEl)return;
   if(!q){resEl.innerHTML='';return;}
-  const unsold=DB.all('finished').filter(f=>!f.sold&&!_cartItems.find(c=>c.fgId===f.id));
+  const unsold=DB.all('finished').filter(f=>{
+    if(_cartItems.find(c=>c.fgId===f.id)) return false; // already in cart
+    if(!f.sold) return true;
+    // In edit mode: allow items that belong to the bill being edited
+    if(_editSaleId && f.saleId===_editSaleId) return true;
+    return false;
+  });
   const byProduct=unsold.filter(f=>f.product.toLowerCase().includes(q));
   const bySerial=unsold.filter(f=>f.serialNumber.toLowerCase().includes(q)&&!byProduct.find(p=>p.id===f.id));
   const results=[...byProduct,...bySerial];
@@ -1369,6 +1449,16 @@ function saveSalesBill(){
   const subtotal=_cartItems.reduce((s,it)=>s+parseFloat(it.price||0),0);
   const taxAmt=subtotal*taxPct/100, totalAmount=subtotal+taxAmt;
   const buyerType=document.getElementById('fsl-buyer-type').value;
+
+  /* ── Edit mode: un-mark all items from the old bill, then delete old bill ── */
+  if(_editSaleId){
+    const oldSale = DB.find('sales', _editSaleId);
+    if(oldSale){
+      (oldSale.items||[]).forEach(it=>{ if(it.fgId) DB.update('finished',it.fgId,{sold:false,soldDate:null,buyerName:null,buyerType:null,saleId:null}); });
+      DB.delete('sales', _editSaleId);
+    }
+  }
+
   const saleDoc=DB.insert('sales',{
     billno:document.getElementById('fsl-billno').value.trim(), date, buyerType, buyerName,
     buyerPhone:document.getElementById('fsl-buyer-phone').value.trim(),
@@ -1380,7 +1470,8 @@ function saveSalesBill(){
   });
   _cartItems.forEach(it=>{ DB.update('finished',it.fgId,{sold:true,soldDate:date,buyerName,buyerType,saleId:saleDoc.id}); });
   closeModal('modal-sales'); renderSales(); renderFinished(); updateCounts();
-  toast(`Bill saved — ${_cartItems.length} item(s) · ${fmtMoney(totalAmount)}`);
+  toast(`Bill ${_editSaleId?'updated':'saved'} — ${_cartItems.length} item(s) · ${fmtMoney(totalAmount)}`);
+  _editSaleId = null;
 }
 
 function renderSales(){
@@ -1415,6 +1506,7 @@ function renderSales(){
         ${items.map(it=>`<div class="iss-mat-row"><div><span class="imr-name">${it.product}</span> <span style="font-family:var(--font-mono);font-size:0.7rem;color:var(--text-tertiary)">SN:${it.serialNumber}</span></div><span class="imr-qty" style="font-weight:600">${fmtMoney(it.price||0)}</span></div>`).join('')}
       </div>
       <div class="wo-card-foot"><div class="acts">
+        <button class="btn btn-ghost btn-sm" onclick="openSalesModal(null,'${sl.id}')">✏️ Edit</button>
         <button class="btn btn-ghost btn-sm" onclick="printSalesBill('${sl.id}')">🖨 Print Bill</button>
         <button class="act-btn danger" onclick="deleteSale('${sl.id}')">🗑</button>
       </div></div>
