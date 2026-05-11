@@ -489,7 +489,6 @@ label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spa
    PRODUCTION LOG — Redesigned Card Layout
    ══════════════════════════════════════════════════════════ */
 
-/* Summary bar at top */
 .prod-summary-bar {
   display:flex; align-items:center; gap:0;
   background:var(--sidebar-bg); border-radius:12px;
@@ -513,10 +512,8 @@ label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spa
 }
 .psb-divider { width:1px; height:32px; background:rgba(255,255,255,0.08); flex-shrink:0; }
 
-/* Cards wrapper */
 .prod-cards { display:flex; flex-direction:column; gap:0.8rem; }
 
-/* Individual production card */
 .prod-card {
   display:flex; gap:0; background:var(--bg-card);
   border:1px solid var(--border); border-radius:14px;
@@ -525,7 +522,6 @@ label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spa
 }
 .prod-card:hover { box-shadow:var(--shadow-sm); border-color:var(--amber); }
 
-/* Left accent strip */
 .prod-card-left {
   width:56px; flex-shrink:0;
   background:linear-gradient(180deg, var(--amber-pale) 0%, #fff 100%);
@@ -535,20 +531,17 @@ label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spa
 }
 .prod-card-icon { font-size:1.4rem; }
 
-/* Card body */
 .prod-card-body {
   flex:1; min-width:0; padding:0.9rem 1.1rem;
   display:flex; flex-direction:column; gap:0.5rem;
 }
 
-/* Top row: title + meta chips */
 .prod-card-top { display:flex; flex-direction:column; gap:0.3rem; }
 .prod-card-title {
   font-weight:700; font-size:0.97rem; color:var(--text-primary); line-height:1.2;
 }
 .prod-card-meta { display:flex; flex-wrap:wrap; gap:0.3rem; }
 
-/* Meta chips */
 .prod-meta-chip {
   display:inline-flex; align-items:center; gap:0.25rem;
   padding:0.2rem 0.55rem; border-radius:99px;
@@ -568,7 +561,6 @@ label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spa
   border-color:#bfdbfe; font-weight:700;
 }
 
-/* Serial number tags */
 .prod-serials { display:flex; flex-wrap:wrap; gap:0.3rem; }
 .prod-sn-tag {
   display:inline-flex; align-items:center; gap:0.2rem;
@@ -578,7 +570,6 @@ label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spa
   border:1px solid var(--border);
 }
 
-/* Cost breakdown row */
 .prod-card-costs {
   display:flex; flex-wrap:wrap; gap:0.5rem 1.2rem;
   padding:0.6rem 0.8rem;
@@ -608,7 +599,6 @@ label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spa
   border-left:2px solid var(--border);
 }
 
-/* Materials used row */
 .prod-mats-used {
   display:flex; flex-wrap:wrap; align-items:center; gap:0.3rem;
   font-size:0.74rem;
@@ -624,14 +614,12 @@ label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spa
   font-family:var(--font-mono); font-size:0.69rem;
 }
 
-/* Notes */
 .prod-notes {
   font-size:0.76rem; color:var(--text-tertiary); font-style:italic;
   padding:0.3rem 0.5rem;
   border-left:2px solid var(--border);
 }
 
-/* Empty state */
 .prod-empty-state {
   display:flex; flex-direction:column; align-items:center; gap:0.6rem;
   padding:4rem 2rem; text-align:center;
@@ -656,7 +644,6 @@ label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spa
 .sn-item-info { display:flex; flex-direction:column; gap:0.15rem; min-width:0; }
 .sn-badge { font-family:var(--font-mono); font-size:0.78rem; font-weight:600; color:var(--text-primary); }
 
-/* Sales add button — icon only "+" ───────────────────────── */
 .sn-add-btn {
   display:inline-flex; align-items:center; justify-content:center;
   background:var(--amber); color:#fff;
@@ -670,6 +657,135 @@ label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spa
 }
 .sn-add-btn:hover  { background:var(--amber-dark); }
 .sn-add-btn:active { transform:scale(0.92); }
+
+/* ══════════════════════════════════════════════════════════
+   WORKER PROFILE — MATERIAL ISSUANCE TIMELINE
+   ══════════════════════════════════════════════════════════ */
+
+.tl-container {
+  display:flex; flex-direction:column; gap:0;
+}
+
+.tl-day {
+  display:grid;
+  grid-template-columns:140px 1fr;
+  gap:0 1.2rem;
+  position:relative;
+}
+@media(max-width:600px){
+  .tl-day { grid-template-columns:90px 1fr; gap:0 0.7rem; }
+}
+
+/* Vertical spine drawn on the events column left border */
+.tl-day:not(:last-child) .tl-events {
+  border-left:2px solid var(--amber-light);
+  margin-left:0.5rem;
+  padding-left:1.2rem;
+  padding-bottom:1.4rem;
+}
+.tl-day:last-child .tl-events {
+  border-left:2px solid var(--amber-light);
+  margin-left:0.5rem;
+  padding-left:1.2rem;
+  padding-bottom:0.5rem;
+}
+
+.tl-date-col {
+  padding-top:0.15rem;
+  display:flex;
+  justify-content:flex-end;
+}
+.tl-date-badge {
+  background:var(--amber-pale);
+  border:1px solid var(--amber-light);
+  color:var(--amber-dark);
+  font-family:var(--font-mono);
+  font-size:0.68rem;
+  font-weight:700;
+  padding:0.25rem 0.55rem;
+  border-radius:99px;
+  white-space:nowrap;
+  height:fit-content;
+  line-height:1.4;
+}
+
+.tl-events {
+  display:flex; flex-direction:column; gap:0.7rem;
+}
+
+.tl-event {
+  position:relative;
+}
+
+/* The dot on the spine */
+.tl-event-dot {
+  position:absolute;
+  left:-1.65rem;
+  top:0.35rem;
+  width:10px; height:10px;
+  border-radius:50%;
+  background:var(--amber);
+  border:2px solid #fff;
+  box-shadow:0 0 0 2px var(--amber-light);
+  flex-shrink:0;
+}
+
+.tl-event-body {
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:0.7rem 0.9rem;
+  box-shadow:var(--shadow-xs);
+  transition:border-color 0.15s, box-shadow 0.15s;
+}
+.tl-event-body:hover {
+  border-color:var(--amber-light);
+  box-shadow:var(--shadow-sm);
+}
+
+.tl-event-title {
+  font-weight:700;
+  font-size:0.82rem;
+  color:var(--text-primary);
+  margin-bottom:0.4rem;
+}
+
+.tl-event-note {
+  font-size:0.74rem;
+  color:var(--text-tertiary);
+  font-style:italic;
+  margin-bottom:0.4rem;
+  padding-left:0.3rem;
+  border-left:2px solid var(--border);
+}
+
+.tl-mats-grid {
+  display:flex;
+  flex-wrap:wrap;
+  gap:0.3rem;
+}
+
+.tl-mat-chip {
+  display:inline-flex;
+  align-items:center;
+  gap:0.35rem;
+  padding:0.22rem 0.6rem;
+  border-radius:6px;
+  background:var(--amber-pale);
+  border:1px solid var(--amber-light);
+  font-size:0.74rem;
+}
+
+.tl-mat-name {
+  font-weight:600;
+  color:var(--text-primary);
+}
+.tl-mat-qty {
+  font-family:var(--font-mono);
+  font-size:0.68rem;
+  color:var(--amber-dark);
+  font-weight:700;
+}
 
 /* ── RESPONSIVE ───────────────────────────────────────────── */
 @media (max-width:900px) {
@@ -688,4 +804,5 @@ label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spa
   .prod-card-costs { gap:0.5rem; }
   .prod-summary-bar { grid-template-columns:1fr 1fr; display:grid; }
   .psb-divider { display:none; }
+  .tl-day { grid-template-columns:80px 1fr; }
 }
