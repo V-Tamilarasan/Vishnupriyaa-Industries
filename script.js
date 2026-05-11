@@ -615,6 +615,7 @@ function renderWorkerProfile(){
   const fin=DB.where('finished',f=>f.workerId===wid);
   const totalHoldingValue=holdings.reduce((s,h)=>{const m=DB.all('materials').find(m=>m.name===h.mat); return s+parseFloat(h.qty||0)*parseFloat(m?.unitCost||0);},0);
   const totalMatUsedValue=fin.reduce((s,f)=>s+parseFloat(f.matCostPerPiece||0),0);
+  const issuances=DB.where('issuances',i=>i.workerId===wid||i.workerName===worker.name);
 
   pageEl.innerHTML=`<div class="page-inner">
     <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-bottom:1.2rem">
@@ -639,21 +640,21 @@ function renderWorkerProfile(){
     </div>
 
     <div class="two-col">
-      <div class="card" style="border-color:${holdings.length?'var(--amber)':'var(--border)'}">
+      <!-- ── HOLDINGS CARD ── -->
+      <div class="card" id="wp-holdings-card" style="border-color:${holdings.length?'var(--amber)':'var(--border)'}">
         <div class="card-hdr" style="${holdings.length?'background:var(--amber-pale)':''}">
           <span class="card-title" style="${holdings.length?'color:var(--amber-dark)':''}">📦 Currently Holding</span>
           <div style="display:flex;gap:0.4rem;align-items:center">
-            ${holdings.length?`<span style="font-size:0.72rem;font-family:var(--font-mono);color:var(--amber-dark)">${fmtMoney(totalHoldingValue)}</span>`:''}
-            ${holdings.length?`<button class="btn btn-ghost btn-sm" onclick="openDirectReturn('${wid}')">↩ Return to Stock</button>`:''}
+            ${holdings.length?`<span id="wp-holding-val" style="font-size:0.72rem;font-family:var(--font-mono);color:var(--amber-dark)">${fmtMoney(totalHoldingValue)}</span>`:''}
+            ${holdings.length?`<button class="btn btn-ghost btn-sm" onclick="openDirectReturn('${wid}')">↩ Return</button>`:''}
+            <button class="btn btn-ghost btn-sm" id="wp-holding-edit-btn" onclick="toggleHoldingEdit('${wid}')">✏️ Edit</button>
           </div>
         </div>
-        <div class="card-body">
-          ${holdings.length?`<table class="data-table" style="font-size:0.82rem">
-            <thead><tr><th>Material</th><th>Qty</th><th>Unit</th></tr></thead>
-            <tbody>${holdings.map(h=>`<tr><td class="td-name">${h.mat}</td><td class="td-mono">${fmtNum(h.qty)}</td><td class="td-mono">${h.unit}</td></tr>`).join('')}</tbody>
-          </table>`:'<div class="dash-empty" style="color:var(--success)">✓ Not holding any materials</div>'}
+        <div class="card-body" id="wp-holdings-body">
+          ${_renderHoldingsView(holdings)}
         </div>
       </div>
+
       <div class="card">
         <div class="card-hdr"><span class="card-title">🪑 Finished Products</span></div>
         <div class="card-body">
@@ -691,52 +692,210 @@ function renderWorkerProfile(){
       </div>
     </div>
 
-    ${(()=>{
-      /* ── Material Issuance Timeline ── */
-      const issuances = DB.where('issuances', i => i.workerId === wid || i.workerName === worker.name);
-      if(!issuances.length) return '';
-      /* Sort chronologically oldest→newest */
-      const sorted = [...issuances].sort((a,b)=> new Date(a.date+'T00:00:00') - new Date(b.date+'T00:00:00'));
-      /* Group by date */
-      const byDate = {};
-      sorted.forEach(iss=>{ const d=iss.date||'unknown'; if(!byDate[d])byDate[d]=[]; byDate[d].push(iss); });
-      const totalMatsIssued = issuances.reduce((s,i)=>s+(i.materials||[]).length,0);
-      const timelineHTML = Object.entries(byDate).map(([date, entries])=>`
-        <div class="tl-day">
-          <div class="tl-date-col">
-            <div class="tl-date-badge">${fmtDate(date)}</div>
-          </div>
-          <div class="tl-events">
-            ${entries.map(iss=>`
-              <div class="tl-event">
-                <div class="tl-event-dot"></div>
-                <div class="tl-event-body">
-                  <div class="tl-event-title">📦 Materials Issued</div>
-                  ${iss.notes?`<div class="tl-event-note">💬 ${iss.notes}</div>`:''}
-                  <div class="tl-mats-grid">
-                    ${(iss.materials||[]).map(m=>`
-                      <div class="tl-mat-chip">
-                        <span class="tl-mat-name">${m.mat}</span>
-                        <span class="tl-mat-qty">${fmtNum(m.qty)} ${m.unit}</span>
-                      </div>`).join('')}
-                  </div>
-                </div>
-              </div>`).join('')}
-          </div>
-        </div>`).join('');
-      return `
-        <div class="card" style="margin-top:1.2rem;border-color:var(--amber-light)">
-          <div class="card-hdr" style="background:var(--amber-pale)">
-            <span class="card-title" style="color:var(--amber-dark)">📅 Material Issuance Timeline</span>
-            <span style="font-size:0.72rem;font-family:var(--font-mono);color:var(--amber-dark)">${issuances.length} issuance${issuances.length>1?'s':''} · ${totalMatsIssued} material line${totalMatsIssued>1?'s':''}</span>
-          </div>
-          <div class="card-body" style="padding:1rem 1.2rem">
-            <div class="tl-container">${timelineHTML}</div>
-          </div>
-        </div>`;
-    })()}
+    ${_renderIssuanceTimeline(issuances, worker)}
 
   </div>`;
+}
+
+/* ── Holdings view (read-only table) ── */
+function _renderHoldingsView(holdings){
+  if(!holdings.length) return '<div class="dash-empty" style="color:var(--success)">✓ Not holding any materials</div>';
+  return `<table class="data-table" style="font-size:0.82rem">
+    <thead><tr><th>Material</th><th>Qty</th><th>Unit</th></tr></thead>
+    <tbody>${holdings.map(h=>`<tr><td class="td-name">${h.mat}</td><td class="td-mono">${fmtNum(h.qty)}</td><td class="td-mono">${h.unit}</td></tr>`).join('')}</tbody>
+  </table>`;
+}
+
+/* ── Holdings edit mode ── */
+let _holdingEditMode = false;
+function toggleHoldingEdit(wid){
+  _holdingEditMode = !_holdingEditMode;
+  const worker = DB.find('workers', wid);
+  if(!worker) return;
+  const body = document.getElementById('wp-holdings-body');
+  const btn  = document.getElementById('wp-holding-edit-btn');
+  if(!body) return;
+  if(_holdingEditMode){
+    btn.textContent='✕ Cancel';
+    btn.style.background='var(--danger-light)';
+    btn.style.borderColor='var(--danger)';
+    btn.style.color='var(--danger)';
+    body.innerHTML = _renderHoldingsEditForm(worker.holdings||[], wid);
+    _wireHoldingEditForm(wid);
+  } else {
+    btn.textContent='✏️ Edit';
+    btn.style.background='';btn.style.borderColor='';btn.style.color='';
+    body.innerHTML = _renderHoldingsView(worker.holdings||[]);
+  }
+}
+
+function _renderHoldingsEditForm(holdings, wid){
+  const rows = holdings.length ? holdings : [];
+  return `
+    <div id="he-rows">
+      ${rows.map((h,i)=>`
+        <div class="he-row" id="he-row-${i}">
+          <div class="combo-wrap" style="flex:1">
+            <input class="finput he-mat" id="he-mat-${i}" value="${h.mat}" placeholder="Material" autocomplete="off" style="font-size:0.82rem"/>
+            <div class="combo-drop" id="he-mat-drop-${i}"></div>
+          </div>
+          <input class="finput he-qty" id="he-qty-${i}" type="number" min="0" step="0.01" value="${h.qty}" placeholder="0" style="width:90px;font-size:0.82rem"/>
+          <div class="combo-wrap" style="width:80px">
+            <input class="finput he-unit" id="he-unit-${i}" value="${h.unit}" placeholder="unit" autocomplete="off" style="font-size:0.82rem"/>
+            <div class="combo-drop" id="he-unit-drop-${i}"></div>
+          </div>
+          <button class="row-del" onclick="heDelRow(${i})">×</button>
+        </div>`).join('')}
+      ${!rows.length?'<div id="he-empty-hint" style="font-size:0.78rem;color:var(--text-light);padding:0.4rem 0;text-align:center">No holdings — add a row below</div>':''}
+    </div>
+    <button class="add-row-btn" style="margin-top:0.5rem" onclick="heAddRow('${wid}')">+ Add Row</button>
+    <div style="display:flex;gap:0.5rem;margin-top:0.6rem">
+      <button class="btn btn-primary btn-sm" style="flex:1" onclick="saveHoldingEdit('${wid}')">💾 Save Holdings</button>
+    </div>`;
+}
+
+let _heRowCount = 0;
+function _wireHoldingEditForm(wid){
+  const mats = DB.all('materials').map(m=>m.name);
+  document.querySelectorAll('.he-mat').forEach((inp,i)=>{
+    buildCombo(inp.id, `he-mat-drop-${i}`, mats, val=>{
+      inp.value = val;
+      const m = DB.all('materials').find(m=>m.name===val);
+      const uEl = document.getElementById(`he-unit-${i}`);
+      if(m && uEl && !uEl.value) uEl.value = m.unit||'';
+    });
+  });
+  document.querySelectorAll('.he-unit').forEach((inp,i)=>{
+    buildCombo(inp.id, `he-unit-drop-${i}`, DB.savedUnits());
+  });
+  // set _heRowCount to match current row count
+  _heRowCount = document.querySelectorAll('.he-row').length;
+}
+
+function heAddRow(wid){
+  const hint = document.getElementById('he-empty-hint');
+  if(hint) hint.remove();
+  const wrap = document.getElementById('he-rows');
+  if(!wrap) return;
+  const i = _heRowCount++;
+  const div = document.createElement('div');
+  div.className='he-row'; div.id=`he-row-${i}`;
+  div.innerHTML=`
+    <div class="combo-wrap" style="flex:1">
+      <input class="finput he-mat" id="he-mat-${i}" value="" placeholder="Material" autocomplete="off" style="font-size:0.82rem"/>
+      <div class="combo-drop" id="he-mat-drop-${i}"></div>
+    </div>
+    <input class="finput he-qty" id="he-qty-${i}" type="number" min="0" step="0.01" value="" placeholder="0" style="width:90px;font-size:0.82rem"/>
+    <div class="combo-wrap" style="width:80px">
+      <input class="finput he-unit" id="he-unit-${i}" value="" placeholder="unit" autocomplete="off" style="font-size:0.82rem"/>
+      <div class="combo-drop" id="he-unit-drop-${i}"></div>
+    </div>
+    <button class="row-del" onclick="heDelRow(${i})">×</button>`;
+  wrap.appendChild(div);
+  const mats = DB.all('materials').map(m=>m.name);
+  buildCombo(`he-mat-${i}`,`he-mat-drop-${i}`,mats,val=>{
+    document.getElementById(`he-mat-${i}`).value=val;
+    const m=DB.all('materials').find(m=>m.name===val);
+    const uEl=document.getElementById(`he-unit-${i}`);
+    if(m&&uEl&&!uEl.value) uEl.value=m.unit||'';
+  });
+  buildCombo(`he-unit-${i}`,`he-unit-drop-${i}`,DB.savedUnits());
+  setTimeout(()=>document.getElementById(`he-mat-${i}`)?.focus(),50);
+}
+
+function heDelRow(i){
+  const el=document.getElementById(`he-row-${i}`);
+  if(el) el.remove();
+}
+
+function saveHoldingEdit(wid){
+  const rows=[];
+  document.querySelectorAll('#he-rows .he-row').forEach(row=>{
+    const id=row.id.replace('he-row-','');
+    const mat=(document.getElementById(`he-mat-${id}`)?.value||'').trim();
+    const qty=parseFloat(document.getElementById(`he-qty-${id}`)?.value||0);
+    const unit=(document.getElementById(`he-unit-${id}`)?.value||'').trim();
+    if(mat&&qty>0) rows.push({mat,qty,unit});
+  });
+  DB.update('workers',wid,{holdings:rows});
+  _holdingEditMode=false;
+  toast('Holdings updated');
+  renderWorkerProfile();
+  updateCounts();
+}
+
+/* ── Redesigned Issuance Timeline ── */
+function _renderIssuanceTimeline(issuances, worker){
+  if(!issuances.length) return `
+    <div class="card" style="margin-top:1.2rem">
+      <div class="card-hdr">
+        <span class="card-title">📅 Material Issuance Timeline</span>
+      </div>
+      <div class="card-body">
+        <div class="t-empty" style="padding:2rem 0"><span class="t-empty-ico">📭</span>No materials have been issued yet</div>
+      </div>
+    </div>`;
+
+  const sorted=[...issuances].sort((a,b)=>new Date(b.date+'T00:00:00')-new Date(a.date+'T00:00:00'));
+  const totalItems=issuances.reduce((s,i)=>s+(i.materials||[]).length,0);
+  const totalQtyByMat={};
+  issuances.forEach(iss=>(iss.materials||[]).forEach(m=>{totalQtyByMat[m.mat]=(totalQtyByMat[m.mat]||0)+parseFloat(m.qty||0);}));
+
+  /* Summary chips */
+  const summaryChips=Object.entries(totalQtyByMat).slice(0,6).map(([mat,qty])=>`
+    <div class="tl2-summary-chip">
+      <span class="tl2-sc-mat">${mat}</span>
+      <span class="tl2-sc-qty">${fmtNum(qty)}</span>
+    </div>`).join('');
+
+  /* Timeline cards */
+  const cards=sorted.map((iss,idx)=>{
+    const isFirst=idx===0;
+    const matTotal=(iss.materials||[]).reduce((s,m)=>s+parseFloat(m.qty||0),0);
+    return `
+      <div class="tl2-card ${isFirst?'tl2-card-latest':''}">
+        <div class="tl2-card-top">
+          <div class="tl2-card-date">
+            ${isFirst?'<span class="tl2-latest-badge">Latest</span>':''}
+            <span class="tl2-date-text">${fmtDate(iss.date)}</span>
+          </div>
+          <span class="tl2-item-count">${(iss.materials||[]).length} item${(iss.materials||[]).length>1?'s':''}</span>
+        </div>
+        ${iss.notes?`<div class="tl2-note">💬 ${iss.notes}</div>`:''}
+        <div class="tl2-mats">
+          ${(iss.materials||[]).map(m=>`
+            <div class="tl2-mat-row">
+              <div class="tl2-mat-icon">📦</div>
+              <div class="tl2-mat-info">
+                <span class="tl2-mat-name">${m.mat}</span>
+                <span class="tl2-mat-unit">${m.unit}</span>
+              </div>
+              <span class="tl2-mat-qty">${fmtNum(m.qty)}</span>
+            </div>`).join('')}
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="card" style="margin-top:1.2rem;overflow:visible">
+      <div class="card-hdr" style="background:linear-gradient(135deg,var(--sidebar-bg),#2e3650);border-radius:11px 11px 0 0">
+        <div>
+          <span class="card-title" style="color:#fff">📅 Material Issuance Timeline</span>
+          <div style="font-size:0.68rem;color:rgba(255,255,255,0.4);margin-top:0.15rem;font-family:var(--font-mono)">${issuances.length} issuance${issuances.length>1?'s':''} · ${totalItems} line${totalItems>1?'s':''} total</div>
+        </div>
+        <button class="btn btn-sm" style="background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.15)" onclick="openIssueModal('${worker.id}')">+ Issue More</button>
+      </div>
+
+      ${Object.keys(totalQtyByMat).length?`
+      <div style="padding:0.8rem 1.1rem;background:var(--amber-pale);border-bottom:1px solid var(--border-light)">
+        <div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--amber-dark);margin-bottom:0.5rem">All-time totals issued</div>
+        <div class="tl2-summary-chips">${summaryChips}${Object.keys(totalQtyByMat).length>6?`<div class="tl2-summary-chip" style="opacity:0.6">+${Object.keys(totalQtyByMat).length-6} more</div>`:''}</div>
+      </div>`:''}
+
+      <div class="tl2-scroll-wrap">
+        <div class="tl2-cards-track">${cards}</div>
+      </div>
+    </div>`;
 }
 
 /* ═══════════════════════════════════════════════════
