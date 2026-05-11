@@ -659,132 +659,151 @@ label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spa
 .sn-add-btn:active { transform:scale(0.92); }
 
 /* ══════════════════════════════════════════════════════════
-   WORKER PROFILE — MATERIAL ISSUANCE TIMELINE
+   WORKER PROFILE — HOLDINGS EDIT FORM
    ══════════════════════════════════════════════════════════ */
 
-.tl-container {
-  display:flex; flex-direction:column; gap:0;
-}
-
-.tl-day {
+.he-row {
   display:grid;
-  grid-template-columns:140px 1fr;
-  gap:0 1.2rem;
-  position:relative;
-}
-@media(max-width:600px){
-  .tl-day { grid-template-columns:90px 1fr; gap:0 0.7rem; }
-}
-
-/* Vertical spine drawn on the events column left border */
-.tl-day:not(:last-child) .tl-events {
-  border-left:2px solid var(--amber-light);
-  margin-left:0.5rem;
-  padding-left:1.2rem;
-  padding-bottom:1.4rem;
-}
-.tl-day:last-child .tl-events {
-  border-left:2px solid var(--amber-light);
-  margin-left:0.5rem;
-  padding-left:1.2rem;
-  padding-bottom:0.5rem;
-}
-
-.tl-date-col {
-  padding-top:0.15rem;
-  display:flex;
-  justify-content:flex-end;
-}
-.tl-date-badge {
-  background:var(--amber-pale);
-  border:1px solid var(--amber-light);
-  color:var(--amber-dark);
-  font-family:var(--font-mono);
-  font-size:0.68rem;
-  font-weight:700;
-  padding:0.25rem 0.55rem;
-  border-radius:99px;
-  white-space:nowrap;
-  height:fit-content;
-  line-height:1.4;
-}
-
-.tl-events {
-  display:flex; flex-direction:column; gap:0.7rem;
-}
-
-.tl-event {
-  position:relative;
-}
-
-/* The dot on the spine */
-.tl-event-dot {
-  position:absolute;
-  left:-1.65rem;
-  top:0.35rem;
-  width:10px; height:10px;
-  border-radius:50%;
-  background:var(--amber);
-  border:2px solid #fff;
-  box-shadow:0 0 0 2px var(--amber-light);
-  flex-shrink:0;
-}
-
-.tl-event-body {
-  background:var(--bg-card);
-  border:1px solid var(--border);
-  border-radius:10px;
-  padding:0.7rem 0.9rem;
-  box-shadow:var(--shadow-xs);
-  transition:border-color 0.15s, box-shadow 0.15s;
-}
-.tl-event-body:hover {
-  border-color:var(--amber-light);
-  box-shadow:var(--shadow-sm);
-}
-
-.tl-event-title {
-  font-weight:700;
-  font-size:0.82rem;
-  color:var(--text-primary);
-  margin-bottom:0.4rem;
-}
-
-.tl-event-note {
-  font-size:0.74rem;
-  color:var(--text-tertiary);
-  font-style:italic;
-  margin-bottom:0.4rem;
-  padding-left:0.3rem;
-  border-left:2px solid var(--border);
-}
-
-.tl-mats-grid {
-  display:flex;
-  flex-wrap:wrap;
-  gap:0.3rem;
-}
-
-.tl-mat-chip {
-  display:inline-flex;
+  grid-template-columns:1fr 90px 80px 28px;
+  gap:0.4rem;
   align-items:center;
-  gap:0.35rem;
-  padding:0.22rem 0.6rem;
-  border-radius:6px;
-  background:var(--amber-pale);
-  border:1px solid var(--amber-light);
-  font-size:0.74rem;
+  margin-bottom:0.4rem;
 }
 
-.tl-mat-name {
-  font-weight:600;
-  color:var(--text-primary);
+/* ══════════════════════════════════════════════════════════
+   WORKER PROFILE — MATERIAL ISSUANCE TIMELINE v2
+   Horizontal scrolling card strip
+   ══════════════════════════════════════════════════════════ */
+
+/* Summary chips bar */
+.tl2-summary-chips {
+  display:flex; flex-wrap:wrap; gap:0.35rem;
 }
-.tl-mat-qty {
-  font-family:var(--font-mono);
-  font-size:0.68rem;
-  color:var(--amber-dark);
-  font-weight:700;
+.tl2-summary-chip {
+  display:inline-flex; align-items:center; gap:0.4rem;
+  padding:0.25rem 0.65rem;
+  background:#fff; border:1px solid var(--amber-light); border-radius:99px;
+  font-size:0.73rem;
+}
+.tl2-sc-mat { font-weight:600; color:var(--text-primary); }
+.tl2-sc-qty { font-family:var(--font-mono); font-size:0.68rem; color:var(--amber-dark); font-weight:700; }
+
+/* Horizontal scroll wrapper */
+.tl2-scroll-wrap {
+  padding:1.2rem 1.1rem 1rem;
+  overflow-x:auto;
+  overflow-y:visible;
+  -webkit-overflow-scrolling:touch;
+}
+.tl2-scroll-wrap::-webkit-scrollbar { height:4px; }
+.tl2-scroll-wrap::-webkit-scrollbar-thumb { background:var(--amber-light); border-radius:2px; }
+
+/* Cards track — horizontal flex */
+.tl2-cards-track {
+  display:flex;
+  gap:0.9rem;
+  min-width:max-content;
+  padding-bottom:0.3rem;
+  /* Connecting line behind cards */
+  position:relative;
+}
+.tl2-cards-track::before {
+  content:'';
+  position:absolute;
+  top:28px;
+  left:0; right:0;
+  height:2px;
+  background:linear-gradient(90deg, var(--amber) 0%, var(--amber-light) 100%);
+  z-index:0;
+}
+
+/* Individual card */
+.tl2-card {
+  position:relative; z-index:1;
+  background:var(--bg-card);
+  border:1.5px solid var(--border);
+  border-radius:12px;
+  width:210px; flex-shrink:0;
+  box-shadow:var(--shadow-xs);
+  transition:box-shadow 0.2s, border-color 0.2s, transform 0.2s;
+  overflow:hidden;
+}
+.tl2-card:hover {
+  box-shadow:var(--shadow-sm);
+  border-color:var(--amber);
+  transform:translateY(-3px);
+}
+.tl2-card-latest {
+  border-color:var(--amber);
+  box-shadow:0 0 0 3px rgba(217,119,6,0.15), var(--shadow-sm);
+}
+
+/* Top stripe with date */
+.tl2-card-top {
+  padding:0.55rem 0.75rem 0.45rem;
+  background:linear-gradient(135deg,var(--sidebar-bg),#252c3f);
+  display:flex; align-items:center; justify-content:space-between; gap:0.4rem;
+}
+/* Timeline dot on top stripe */
+.tl2-card-top::before {
+  content:'';
+  display:none; /* handled via the track line */
+}
+
+.tl2-card-date {
+  display:flex; align-items:center; gap:0.35rem; flex-wrap:wrap;
+}
+.tl2-latest-badge {
+  background:var(--amber); color:#fff;
+  font-size:0.55rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px;
+  padding:0.1rem 0.4rem; border-radius:99px; white-space:nowrap;
+}
+.tl2-date-text {
+  font-family:var(--font-mono); font-size:0.68rem; font-weight:600; color:#fff;
+  white-space:nowrap;
+}
+.tl2-item-count {
+  font-size:0.62rem; font-weight:700;
+  background:rgba(255,255,255,0.12); color:rgba(255,255,255,0.7);
+  padding:0.1rem 0.4rem; border-radius:99px; white-space:nowrap; flex-shrink:0;
+}
+
+/* Note */
+.tl2-note {
+  font-size:0.71rem; color:var(--text-tertiary); font-style:italic;
+  padding:0.4rem 0.75rem 0;
+  border-bottom:1px solid var(--border-light);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+
+/* Materials list */
+.tl2-mats {
+  padding:0.5rem 0.75rem 0.65rem;
+  display:flex; flex-direction:column; gap:0.35rem;
+}
+
+.tl2-mat-row {
+  display:flex; align-items:center; gap:0.5rem;
+}
+.tl2-mat-icon {
+  font-size:0.85rem; flex-shrink:0; line-height:1;
+}
+.tl2-mat-info {
+  flex:1; min-width:0;
+  display:flex; flex-direction:column; gap:0.05rem;
+}
+.tl2-mat-name {
+  font-size:0.77rem; font-weight:600; color:var(--text-primary);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.tl2-mat-unit {
+  font-size:0.62rem; color:var(--text-light); text-transform:uppercase; letter-spacing:0.5px;
+}
+.tl2-mat-qty {
+  font-family:var(--font-mono); font-size:0.78rem; font-weight:700;
+  color:var(--amber-dark); white-space:nowrap; flex-shrink:0;
+  background:var(--amber-pale); padding:0.1rem 0.4rem; border-radius:5px;
+  border:1px solid var(--amber-light);
 }
 
 /* ── RESPONSIVE ───────────────────────────────────────────── */
