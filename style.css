@@ -694,36 +694,43 @@ label {
 .cost-row { display:flex; align-items:center; gap:0.5rem; margin-bottom:0.4rem; }
 
 /* ══════════════════════════════════════════════════════════
-   PRODUCTION LOG — Redesigned Card Layout
+   PRODUCTION LOG — Summary Bar
    ══════════════════════════════════════════════════════════ */
 .prod-summary-bar {
-  display:flex; align-items:center;
+  display:flex; align-items:stretch;
   background:var(--sidebar-bg); border-radius:12px;
-  padding:1rem 1.5rem; margin-bottom:1.2rem;
+  padding:0; margin-bottom:1.2rem;
   box-shadow:var(--shadow-sm);
-  flex-wrap:wrap; gap:0;
+  flex-wrap:wrap; overflow:hidden;
 }
 .psb-stat {
-  display:flex; flex-direction:column; align-items:center; gap:0.15rem;
-  flex:1; min-width:80px; padding:0.3rem 0.5rem;
+  display:flex; flex-direction:column; align-items:center;
+  justify-content:center; gap:0.2rem;
+  flex:1; min-width:80px; padding:0.85rem 0.5rem;
+  transition:background 0.15s;
 }
+.psb-stat:hover { background:rgba(255,255,255,0.04); }
 .psb-val {
-  font-family:var(--font-mono); font-size:1.1rem;
+  font-family:var(--font-mono); font-size:1rem;
   font-weight:700; color:#fff; line-height:1;
 }
 .psb-val.psb-amber  { color:var(--amber); }
 .psb-val.psb-blue   { color:#60a5fa; }
 .psb-val.psb-green  { color:#34d399; }
 .psb-lbl {
-  font-size:0.6rem; text-transform:uppercase; letter-spacing:1px;
+  font-size:0.58rem; text-transform:uppercase; letter-spacing:1px;
   color:rgba(255,255,255,0.35); font-weight:600;
 }
 .psb-divider {
-  width:1px; height:32px; background:rgba(255,255,255,0.08); flex-shrink:0;
+  width:1px; background:rgba(255,255,255,0.08); flex-shrink:0;
+  margin:0.5rem 0;
 }
 
 .prod-cards { display:flex; flex-direction:column; gap:0.8rem; }
 
+/* ══════════════════════════════════════════════════════════
+   PRODUCTION LOG — Card Layout
+   ══════════════════════════════════════════════════════════ */
 .prod-card {
   display:flex; gap:0; background:var(--bg-card);
   border:1px solid var(--border); border-radius:14px;
@@ -733,17 +740,17 @@ label {
 .prod-card:hover { box-shadow:var(--shadow-sm); border-color:var(--amber); }
 
 .prod-card-left {
-  width:56px; flex-shrink:0;
-  background:linear-gradient(180deg, var(--amber-pale) 0%, #fff 100%);
+  width:52px; flex-shrink:0;
+  background:var(--amber-pale);
   border-right:1px solid var(--border-light);
   display:flex; align-items:flex-start; justify-content:center;
-  padding-top:1.1rem;
+  padding-top:1.05rem;
 }
 .prod-card-icon { font-size:1.4rem; }
 
 .prod-card-body {
-  flex:1; min-width:0; padding:0.9rem 1.1rem;
-  display:flex; flex-direction:column; gap:0.5rem;
+  flex:1; min-width:0; padding:0.85rem 1.1rem;
+  display:flex; flex-direction:column; gap:0.55rem;
 }
 
 .prod-card-top { display:flex; flex-direction:column; gap:0.3rem; }
@@ -779,9 +786,10 @@ label {
   border:1px solid var(--border);
 }
 
+/* ── Prod Card Costs ──────────────────────────────────────── */
 .prod-card-costs {
   display:flex; flex-wrap:wrap; gap:0.5rem 1.2rem;
-  padding:0.6rem 0.8rem;
+  padding:0.65rem 0.85rem;
   background:var(--bg-secondary); border-radius:9px;
   border:1px solid var(--border-light);
 }
@@ -832,7 +840,74 @@ label {
 .prod-empty-title { font-weight:700; font-size:1rem; color:var(--text-primary); }
 .prod-empty-sub   { font-size:0.8rem; color:var(--text-light); }
 
-/* ── SALES — SN Results Panel ─────────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   PRODUCTION MODAL — Wage Section UI
+   ══════════════════════════════════════════════════════════ */
+.wage-section-hdr {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0.7rem 0.85rem;
+  background:linear-gradient(135deg, var(--sidebar-bg), #252c3f);
+  border-bottom:1px solid rgba(255,255,255,0.08);
+}
+.wage-section-title {
+  font-size:0.78rem; font-weight:700;
+  color:#fff; letter-spacing:0.3px;
+}
+.wage-section-total {
+  font-family:var(--font-mono); font-size:1.05rem; font-weight:700;
+  transition:color 0.2s;
+}
+
+.main-wage-row {
+  display:grid; grid-template-columns:1fr 110px 90px;
+  gap:0.5rem; align-items:center;
+}
+.main-wage-label {
+  font-size:0.82rem; font-weight:600; color:var(--text-primary);
+  display:flex; align-items:center; gap:0.35rem;
+  padding:0.4rem 0;
+}
+
+.sub-worker-divider {
+  font-size:0.62rem; font-weight:700; text-transform:uppercase;
+  letter-spacing:1.5px; color:var(--amber-dark);
+  padding:0.5rem 0 0.1rem; border-top:1px solid var(--border-light);
+  margin-top:0.2rem;
+}
+
+.sub-worker-row {
+  display:grid; grid-template-columns:1fr 110px 90px 28px;
+  gap:0.4rem; align-items:center;
+}
+
+/* ══════════════════════════════════════════════════════════
+   PRODUCTION LOG — Wage Breakdown Chips
+   ══════════════════════════════════════════════════════════ */
+.wage-breakdown {
+  display:flex; flex-wrap:wrap; gap:0.35rem; align-items:center;
+}
+
+.wb-chip {
+  display:inline-flex; align-items:center; gap:0.3rem;
+  padding:0.22rem 0.65rem; border-radius:99px;
+  font-size:0.74rem; font-weight:600; white-space:nowrap;
+  background:var(--amber-pale); color:var(--amber-dark);
+  border:1px solid var(--amber-light);
+}
+
+.wb-chip-sub {
+  background:var(--info-light); color:var(--info);
+  border-color:#bfdbfe;
+}
+
+.wb-chip-total {
+  background:var(--sidebar-bg); color:#fff;
+  border-color:rgba(255,255,255,0.12);
+  font-family:var(--font-mono); font-size:0.72rem;
+  letter-spacing:0.3px;
+}
+
+/* ── Sales — SN Results Panel ─────────────────────────────── */
 .sn-results-panel {
   margin-top:0.5rem; border:1px solid var(--border); border-radius:10px;
   background:var(--bg-card); box-shadow:var(--shadow-sm); max-height:280px; overflow-y:auto;
@@ -873,8 +948,6 @@ label {
 /* ══════════════════════════════════════════════════════════
    WORKER PROFILE — MATERIAL ISSUANCE TIMELINE v2
    ══════════════════════════════════════════════════════════ */
-
-/* Summary chips bar */
 .tl2-summary-chips { display:flex; flex-wrap:wrap; gap:0.35rem; }
 .tl2-summary-chip {
   display:inline-flex; align-items:center; gap:0.4rem;
@@ -888,7 +961,6 @@ label {
   color:var(--amber-dark); font-weight:700;
 }
 
-/* Horizontal scroll wrapper */
 .tl2-scroll-wrap {
   padding:1.2rem 1.1rem 1rem;
   overflow-x:auto; overflow-y:visible;
@@ -899,7 +971,6 @@ label {
   background:var(--amber-light); border-radius:2px;
 }
 
-/* Cards track */
 .tl2-cards-track {
   display:flex; gap:0.9rem; min-width:max-content;
   padding-bottom:0.3rem; position:relative;
@@ -911,7 +982,6 @@ label {
   z-index:0;
 }
 
-/* Individual card */
 .tl2-card {
   position:relative; z-index:1;
   background:var(--bg-card); border:1.5px solid var(--border);
@@ -928,7 +998,6 @@ label {
   box-shadow:0 0 0 3px rgba(217,119,6,0.15), var(--shadow-sm);
 }
 
-/* Top stripe */
 .tl2-card-top {
   padding:0.55rem 0.75rem 0.45rem;
   background:linear-gradient(135deg, var(--sidebar-bg), #252c3f);
@@ -950,7 +1019,6 @@ label {
   padding:0.1rem 0.4rem; border-radius:99px; white-space:nowrap; flex-shrink:0;
 }
 
-/* Edit button on timeline cards */
 .tl2-edit-btn {
   background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.18);
   border-radius:5px; cursor:pointer; color:rgba(255,255,255,0.7);
@@ -959,14 +1027,12 @@ label {
 }
 .tl2-edit-btn:hover { background:var(--amber); color:#fff; border-color:var(--amber); }
 
-/* Note */
 .tl2-note {
   font-size:0.71rem; color:var(--text-tertiary); font-style:italic;
   padding:0.4rem 0.75rem 0; border-bottom:1px solid var(--border-light);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 
-/* Materials list */
 .tl2-mats { padding:0.5rem 0.75rem 0.65rem; display:flex; flex-direction:column; gap:0.35rem; }
 .tl2-mat-row { display:flex; align-items:center; gap:0.5rem; }
 .tl2-mat-icon { font-size:0.85rem; flex-shrink:0; line-height:1; }
@@ -1002,7 +1068,6 @@ label {
 .rs-mat-name { font-weight:600; font-size:0.85rem; color:var(--text-primary); }
 .rs-mat-holding { font-size:0.72rem; color:var(--text-tertiary); }
 
-/* Progress bar */
 .rs-progress-bar {
   height:4px; background:var(--bg-tertiary); border-radius:99px; overflow:hidden;
 }
@@ -1071,4 +1136,9 @@ label {
   .psb-divider { display:none; }
   .rs-row { flex-direction:column; align-items:flex-start; }
   .rs-row-input { width:100%; justify-content:flex-start; }
+  .main-wage-row { grid-template-columns:1fr; }
+  .sub-worker-row { grid-template-columns:1fr 90px 28px; }
+  .sub-worker-row input:nth-child(3) { display:none; }
+  .wage-breakdown { gap:0.25rem; }
+  .wb-chip { font-size:0.68rem; padding:0.18rem 0.5rem; }
 }
