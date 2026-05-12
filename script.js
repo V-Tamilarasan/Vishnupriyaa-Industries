@@ -1,4 +1,3 @@
-
 const DB = (() => {
   const PFX  = 'vi3_';
   const COLS = ['materials','bills','workers','templates','issuances','productions','finished','sales'];
@@ -383,7 +382,6 @@ function saveSupplierBill(){
   const total=valid.reduce((s,r)=>s+r.qty*r.price,0);
 
   if(_editBillId){
-    // Editing: reverse old stock first, then reapply new
     const oldBill=DB.find('bills',_editBillId);
     if(oldBill){
       (oldBill.items||[]).forEach(it=>{
@@ -422,7 +420,6 @@ function openDistributeModal(billId){
   document.getElementById('dist-date').value=todayStr();
   document.getElementById('dist-notes').value=`From supplier bill: ${bill.supplier}${bill.billno?' #'+bill.billno:''}`;
 
-  // Render items preview
   document.getElementById('dist-items-preview').innerHTML=
     `<div style="margin-top:0.5rem">${(bill.items||[]).map(it=>`
       <div class="iss-mat-row">
@@ -455,7 +452,6 @@ function saveDistribute(){
   const worker=workerId?DB.find('workers',workerId):null;
   const wName=worker?.name||workerTxt;
 
-  // Check stock availability
   const insufficient=[];
   (bill.items||[]).forEach(it=>{
     const m=DB.all('materials').find(m=>m.name.toLowerCase()===it.mat.toLowerCase());
@@ -465,7 +461,6 @@ function saveDistribute(){
     toast('Insufficient stock for: '+insufficient.join(', '),'danger'); return;
   }
 
-  // Deduct from stock, add to worker holdings, create issuance
   const validItems=(bill.items||[]).filter(it=>it.mat&&parseFloat(it.qty)>0);
   validItems.forEach(it=>DB.adjustStock(it.mat,-parseFloat(it.qty)));
 
@@ -578,7 +573,8 @@ function renderWorkerProfile(){
   if(!worker){pageEl.innerHTML='<div class="page-inner"><div class="t-empty">Worker not found</div></div>';return;}
   const bc=document.getElementById('bc-page'); if(bc)bc.textContent=`Profile — ${worker.name}`;
   const holdings=worker.holdings||[];
-  const prods=DB.where('productions',p=>p.workerId===wid);
+  // Productions where this worker is main OR sub-worker
+  const prods=DB.where('productions',p=>p.workerId===wid||(p.subWorkers||[]).some(sw=>sw.workerId===wid));
   const fin=DB.where('finished',f=>f.workerId===wid);
   const totalHoldingValue=holdings.reduce((s,h)=>{const m=DB.all('materials').find(m=>m.name===h.mat);return s+parseFloat(h.qty||0)*parseFloat(m?.unitCost||0);},0);
   const totalMatUsedValue=fin.reduce((s,f)=>s+parseFloat(f.matCostPerPiece||0),0);
@@ -634,18 +630,21 @@ function renderWorkerProfile(){
       <div class="card-hdr"><span class="card-title">📋 Production History</span></div>
       <div class="card-body" style="padding:0">
         ${prods.length?`<table class="data-table">
-          <thead><tr><th>Product</th><th>Serial No.</th><th>Date</th><th>Pieces</th><th>Wage</th><th>Materials Used</th><th>Mat. Cost/pc</th><th>Overhead/pc</th></tr></thead>
+          <thead><tr><th>Product</th><th>Role</th><th>Serial No.</th><th>Date</th><th>Pieces</th><th>My Wage</th><th>Total Wages</th><th>Materials Used</th></tr></thead>
           <tbody>${prods.map(p=>{
+            const isMain=p.workerId===wid;
+            const subEntry=(p.subWorkers||[]).find(sw=>sw.workerId===wid);
+            const myWage=isMain?parseFloat(p.mainWage||p.totalWage||0):parseFloat(subEntry?.totalWage||0);
             const ohCost=(p.overheadsSnapshot||[]).reduce((s,o)=>s+parseFloat(o.amount||0),0);
             return `<tr>
               <td class="td-name">${p.product}</td>
+              <td>${isMain?`<span class="badge badge-amber" style="font-size:0.65rem">👷 Main</span>`:`<span class="badge badge-primary" style="font-size:0.65rem">🔧 Sub</span>`}</td>
               <td style="font-family:var(--font-mono);font-size:0.74rem">${(p.serialNumbers||[p.serialNumber||'—']).join(', ')}</td>
               <td class="td-mono">${fmtDate(p.date)}</td>
               <td class="td-mono">${p.piecesCount||1}</td>
+              <td class="td-mono" style="color:var(--amber-dark);font-weight:700">${fmtMoney(myWage)}</td>
               <td class="td-mono">${fmtMoney(p.totalWage||0)}</td>
               <td style="font-size:0.74rem;color:var(--text-tertiary)">${(p.materialsUsed||[]).map(m=>`${fmtNum(m.qty)} ${m.unit} ${m.mat}`).join(', ')||'—'}</td>
-              <td class="td-mono" style="color:var(--amber-dark)">${p.matCostPerPiece>0?fmtMoney(p.matCostPerPiece):'—'}</td>
-              <td class="td-mono" style="color:var(--info)">${ohCost>0?fmtMoney(ohCost):'—'}</td>
             </tr>`;
           }).join('')}</tbody>
         </table>`:'<div class="t-empty"><span class="t-empty-ico">🏭</span>No production yet</div>'}
@@ -1034,16 +1033,19 @@ function renderTemplates(){
 }
 function deleteTemplate(id){if(!confirm('Delete this template?'))return;DB.delete('templates',id);renderTemplates();updateCounts();toast('Deleted','warning');}
 
-/* ═══════════ PRODUCTION ENTRY ═══════════ */
-let _prodMatRows=[], _prodPreWid=null, _prodOverheadsSnapshot=[];
+/* ═══════════════════════════════════════════
+   PRODUCTION ENTRY — Multi-Level Wage System
+   ═══════════════════════════════════════════ */
+let _prodMatRows=[], _prodPreWid=null, _prodOverheadsSnapshot=[], _prodSubWorkerRows=[];
+let _prodSubWCount = 0;
+
 function openProductionModal(preWid=null){
-  _prodMatRows=[];_prodPreWid=preWid||null;_prodOverheadsSnapshot=[];
+  _prodMatRows=[];_prodPreWid=preWid||null;_prodOverheadsSnapshot=[];_prodSubWorkerRows=[];_prodSubWCount=0;
   ['fp-product','fp-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('fp-date').value=todayStr();
   document.getElementById('fp-pieces').value=1;
-  document.getElementById('fp-wage-per').value='';
-  document.getElementById('fp-wage-pcs').value=1;
-  document.getElementById('fp-wage-total').value='';
+  document.getElementById('fp-main-wage-per').value='';
+  document.getElementById('fp-main-wage-total').value='';
   document.getElementById('fp-worker-search').value='';
   document.getElementById('fp-worker-id').value='';
   document.getElementById('fp-template-search').value='';
@@ -1051,17 +1053,112 @@ function openProductionModal(preWid=null){
   document.getElementById('fp-holdings-list').innerHTML='';
   document.getElementById('fp-mat-cost').innerHTML='';
   document.getElementById('fp-overhead-preview').innerHTML='';
+  document.getElementById('fp-sub-workers-wrap').innerHTML='<div style="font-size:0.78rem;color:var(--text-light);text-align:center;padding:0.5rem;border:1px dashed var(--border);border-radius:8px">No sub-workers added</div>';
+  _updateWageGrandTotal();
   renderSerialRows(1);renderProdMatRows();
+
   if(preWid){const w=DB.find('workers',preWid);if(w){document.getElementById('fp-worker-search').value=w.name;document.getElementById('fp-worker-id').value=w.id;_loadWorkerForProd(w);}}
+
   buildCombo('fp-worker-search','fp-worker-drop',DB.all('workers').map(w=>w.name),val=>{const w=DB.all('workers').find(w=>w.name===val);if(!w)return;document.getElementById('fp-worker-id').value=w.id;_loadWorkerForProd(w);});
   buildCombo('fp-template-search','fp-template-drop',DB.all('templates').map(t=>t.name),val=>{const t=DB.all('templates').find(t=>t.name===val);if(!t)return;_applyTemplateToProd(t);});
+
+  // Pieces listener
   const piecesEl=document.getElementById('fp-pieces');const pClone=piecesEl.cloneNode(true);piecesEl.parentNode.replaceChild(pClone,piecesEl);
-  document.getElementById('fp-pieces').addEventListener('input',e=>{const n=Math.max(1,parseInt(e.target.value)||1);document.getElementById('fp-wage-pcs').value=n;renderSerialRows(n);calcWage();});
-  const calcWage=()=>{const per=parseFloat(document.getElementById('fp-wage-per').value)||0,pcs=parseFloat(document.getElementById('fp-wage-pcs').value)||1;document.getElementById('fp-wage-total').value=(per*pcs).toFixed(0);};
-  const wEl=document.getElementById('fp-wage-per'),wCl=wEl.cloneNode(true);wEl.parentNode.replaceChild(wCl,wEl);
-  document.getElementById('fp-wage-per').addEventListener('input',calcWage);
-  openModal('modal-production');setTimeout(()=>document.getElementById('fp-product')?.focus(),100);
+  document.getElementById('fp-pieces').addEventListener('input',e=>{
+    const n=Math.max(1,parseInt(e.target.value)||1);
+    renderSerialRows(n);
+    _calcMainWage();
+    _prodSubWorkerRows.forEach((_,i)=>_calcSubWage(i));
+    _updateWageGrandTotal();
+  });
+
+  // Main wage listener
+  const mwEl=document.getElementById('fp-main-wage-per');const mwCl=mwEl.cloneNode(true);mwEl.parentNode.replaceChild(mwCl,mwEl);
+  document.getElementById('fp-main-wage-per').addEventListener('input',()=>{_calcMainWage();_updateWageGrandTotal();});
+
+  // Add sub-worker button
+  const addSwBtn=document.getElementById('fp-add-sub-worker');
+  const asCl=addSwBtn.cloneNode(true);addSwBtn.parentNode.replaceChild(asCl,addSwBtn);
+  document.getElementById('fp-add-sub-worker').addEventListener('click',()=>_addSubWorkerRow());
+
+  openModal('modal-production');
+  setTimeout(()=>document.getElementById('fp-product')?.focus(),100);
 }
+
+function _calcMainWage(){
+  const per=parseFloat(document.getElementById('fp-main-wage-per')?.value)||0;
+  const pcs=parseInt(document.getElementById('fp-pieces')?.value)||1;
+  const total=per*pcs;
+  const el=document.getElementById('fp-main-wage-total');
+  if(el)el.value=total>0?total.toFixed(0):'';
+}
+
+function _addSubWorkerRow(widVal='',nameVal='',wagePerVal='',wageTotalVal=''){
+  const hint=document.getElementById('fp-sub-workers-wrap')?.querySelector('div[style*="dashed"]');
+  if(hint)hint.remove();
+  const wrap=document.getElementById('fp-sub-workers-wrap'); if(!wrap)return;
+  const i=_prodSubWCount++;
+  _prodSubWorkerRows[i]={workerId:widVal,workerName:nameVal,wagePerPiece:parseFloat(wagePerVal)||0,totalWage:parseFloat(wageTotalVal)||0};
+  const div=document.createElement('div');
+  div.id=`sw-row-${i}`;
+  div.className='sub-worker-row';
+  div.style.marginBottom='0.4rem';
+  div.innerHTML=`
+    <div class="combo-wrap">
+      <input class="finput" id="sw-name-${i}" value="${nameVal}" placeholder="Sub-worker name…" autocomplete="off" style="font-size:0.82rem"/>
+      <div class="combo-drop" id="sw-drop-${i}"></div>
+      <input type="hidden" id="sw-id-${i}" value="${widVal}"/>
+    </div>
+    <input class="finput" id="sw-per-${i}" type="number" min="0" step="1" value="${wagePerVal||''}" placeholder="₹/piece" style="font-size:0.82rem"/>
+    <input class="finput" id="sw-total-${i}" type="number" min="0" step="1" value="${wageTotalVal||''}" placeholder="Total ₹" style="font-size:0.82rem;font-weight:600"/>
+    <button class="row-del" onclick="swDelRow(${i})">×</button>
+  `;
+  wrap.appendChild(div);
+
+  // Wire worker search combo (exclude main worker)
+  const workerNames=DB.all('workers').filter(w=>w.id!==document.getElementById('fp-worker-id').value).map(w=>w.name);
+  buildCombo(`sw-name-${i}`,`sw-drop-${i}`,workerNames,val=>{
+    const w=DB.all('workers').find(w=>w.name===val);
+    document.getElementById(`sw-id-${i}`).value=w?.id||'';
+    _prodSubWorkerRows[i].workerId=w?.id||'';
+    _prodSubWorkerRows[i].workerName=val;
+  });
+  document.getElementById(`sw-name-${i}`).addEventListener('input',e=>{_prodSubWorkerRows[i].workerName=e.target.value;});
+  document.getElementById(`sw-per-${i}`).addEventListener('input',()=>{_calcSubWage(i);_updateWageGrandTotal();});
+  document.getElementById(`sw-total-${i}`).addEventListener('input',e=>{_prodSubWorkerRows[i].totalWage=parseFloat(e.target.value)||0;_updateWageGrandTotal();});
+  setTimeout(()=>document.getElementById(`sw-name-${i}`)?.focus(),50);
+}
+
+function _calcSubWage(i){
+  const per=parseFloat(document.getElementById(`sw-per-${i}`)?.value)||0;
+  const pcs=parseInt(document.getElementById('fp-pieces')?.value)||1;
+  const total=per*pcs;
+  _prodSubWorkerRows[i].wagePerPiece=per;
+  _prodSubWorkerRows[i].totalWage=total;
+  const el=document.getElementById(`sw-total-${i}`);
+  if(el)el.value=total>0?total.toFixed(0):'';
+}
+
+function swDelRow(i){
+  const el=document.getElementById(`sw-row-${i}`); if(el)el.remove();
+  _prodSubWorkerRows[i]={workerId:'',workerName:'',wagePerPiece:0,totalWage:0,deleted:true};
+  _updateWageGrandTotal();
+  const wrap=document.getElementById('fp-sub-workers-wrap');
+  const remaining=wrap?.querySelectorAll('.sub-worker-row');
+  if(!remaining||!remaining.length){wrap.innerHTML='<div style="font-size:0.78rem;color:var(--text-light);text-align:center;padding:0.5rem;border:1px dashed var(--border);border-radius:8px">No sub-workers added</div>';}
+}
+
+function _updateWageGrandTotal(){
+  const mainTotal=parseFloat(document.getElementById('fp-main-wage-total')?.value)||0;
+  const subTotal=_prodSubWorkerRows.filter(r=>!r.deleted).reduce((s,r)=>s+parseFloat(r.totalWage||0),0);
+  const grand=mainTotal+subTotal;
+  const el=document.getElementById('fp-wage-grand-total');
+  if(el){
+    el.textContent=fmtMoney(grand);
+    el.style.color=grand>0?'var(--amber)':'rgba(255,255,255,0.3)';
+  }
+}
+
 function renderSerialRows(n){
   const wrap=document.getElementById('fp-serial-rows');if(!wrap)return;
   const existing=[...wrap.querySelectorAll('.fp-sn-input')].map(el=>el.value);
@@ -1130,43 +1227,126 @@ function renderProdMatRows(){
   else if(costEl)costEl.innerHTML='';
 }
 function prodDelRow(i){_prodMatRows.splice(i,1);renderProdMatRows();}
+
 function saveProduction(){
   const workerId=document.getElementById('fp-worker-id').value,workerTxt=document.getElementById('fp-worker-search').value.trim();
   const product=document.getElementById('fp-product').value.trim(),date=document.getElementById('fp-date').value;
   const pieces=parseInt(document.getElementById('fp-pieces').value)||1;
-  const wagePer=parseFloat(document.getElementById('fp-wage-per').value)||0;
-  const totalWageAll=parseFloat(document.getElementById('fp-wage-total').value)||wagePer*pieces;
+  const mainWagePer=parseFloat(document.getElementById('fp-main-wage-per').value)||0;
+  const mainWageTotal=parseFloat(document.getElementById('fp-main-wage-total').value)||mainWagePer*pieces;
+
   if(!workerId&&!workerTxt){toast('Select a worker','danger');return;}
   if(!product){toast('Enter product name','danger');return;}
   if(!date){toast('Select a date','danger');return;}
+
   const snInputs=[...document.querySelectorAll('.fp-sn-input')].map(el=>el.value.trim());
   const serials=snInputs.slice(0,pieces);
   if(serials.filter(s=>!s).length){toast(`Enter serial numbers for all ${pieces} piece(s)`,'danger');return;}
   if(new Set(serials).size!==serials.length){toast('All serial numbers must be unique','danger');return;}
   const alreadyUsed=serials.filter(s=>!DB.isSerialUnique(s));
   if(alreadyUsed.length){toast('Already used: '+alreadyUsed.join(', '),'danger');return;}
+
   const used=_prodMatRows.filter(r=>r.mat&&parseFloat(r.qty)>0);
   const worker=workerId?DB.find('workers',workerId):null;
+
   if(worker){
     const totalNeeded={};used.forEach(u=>{totalNeeded[u.mat]=(totalNeeded[u.mat]||0)+parseFloat(u.qty)*pieces;});
     const overuse=Object.entries(totalNeeded).filter(([mat,needed])=>{const h=worker.holdings?.find(h=>h.mat===mat);return !h||parseFloat(h.qty)<needed;});
     if(overuse.length){toast(`Not enough for ${pieces} pc(s): `+overuse.map(([m])=>m).join(', '),'danger');return;}
   }
+
+  // Collect valid sub-workers from DOM
+  const activeSubWorkers=_prodSubWorkerRows.filter((r,i)=>{
+    if(r.deleted)return false;
+    const nameEl=document.getElementById(`sw-name-${i}`);
+    const name=(nameEl?.value||r.workerName||'').trim();
+    const wid=document.getElementById(`sw-id-${i}`)?.value||r.workerId||'';
+    const perEl=document.getElementById(`sw-per-${i}`);
+    const totalEl=document.getElementById(`sw-total-${i}`);
+    const per=parseFloat(perEl?.value||r.wagePerPiece)||0;
+    const tot=parseFloat(totalEl?.value||r.totalWage)||per*pieces;
+    r.workerName=name;r.workerId=wid;r.wagePerPiece=per;r.totalWage=tot;
+    return name.length>0;
+  });
+
+  const subWageTotal=activeSubWorkers.reduce((s,r)=>s+parseFloat(r.totalWage||0),0);
+  const totalWageAll=mainWageTotal+subWageTotal;
+
   const wName=worker?.name||workerTxt;
   const matCostSnapshot={};DB.all('materials').forEach(m=>{matCostSnapshot[m.name]=parseFloat(m.unitCost||0);});
   const matCostPerPiece=used.reduce((s,u)=>s+parseFloat(u.qty||0)*parseFloat(matCostSnapshot[u.mat]||0),0);
+
+  // Deduct materials from main worker's holdings
   if(worker){
     const holdings=[...(worker.holdings||[])];
     used.forEach(u=>{const h=holdings.find(h=>h.mat===u.mat);if(h)h.qty=Math.max(0,parseFloat(h.qty)-parseFloat(u.qty)*pieces);});
-    DB.update('workers',worker.id,{holdings:holdings.filter(h=>parseFloat(h.qty)>0),totalJobs:(worker.totalJobs||0)+pieces,totalEarned:(worker.totalEarned||0)+totalWageAll});
+    DB.update('workers',worker.id,{
+      holdings:holdings.filter(h=>parseFloat(h.qty)>0),
+      totalJobs:(worker.totalJobs||0)+pieces,
+      totalEarned:(worker.totalEarned||0)+mainWageTotal   // only main wage credited to main worker
+    });
   }
+
+  // Credit each sub-worker their wage and increment job count
+  activeSubWorkers.forEach(sw=>{
+    if(!sw.workerId)return;
+    const sw_worker=DB.find('workers',sw.workerId);if(!sw_worker)return;
+    DB.update('workers',sw.workerId,{
+      totalJobs:(sw_worker.totalJobs||0)+pieces,
+      totalEarned:(sw_worker.totalEarned||0)+parseFloat(sw.totalWage||0)
+    });
+  });
+
   const overheadsSnapshot=[..._prodOverheadsSnapshot];
   const ohCostPerPiece=overheadsSnapshot.reduce((s,o)=>s+parseFloat(o.amount||0),0);
-  const prod=DB.insert('productions',{workerId:workerId||null,workerName:wName,product,serialNumbers:serials,date,piecesCount:pieces,wagePerPiece:wagePer,totalWage:totalWageAll,materialsUsed:used,matCostPerPiece,matCostSnapshot,overheadsSnapshot,ohCostPerPiece,notes:document.getElementById('fp-notes').value.trim()});
-  serials.forEach(sn=>{DB.insert('finished',{productionId:prod.id,workerId:workerId||null,workerName:wName,product,serialNumber:sn,date,totalWage:totalWageAll/pieces,materialsUsed:used,matCostPerPiece,ohCostPerPiece,overheadsSnapshot,sold:false});});
+
+  const prod=DB.insert('productions',{
+    workerId:workerId||null,
+    workerName:wName,
+    product,
+    serialNumbers:serials,
+    date,
+    piecesCount:pieces,
+    // Main worker wage
+    wagePerPiece:mainWagePer,
+    mainWage:mainWageTotal,
+    // Sub-workers
+    subWorkers:activeSubWorkers.map(sw=>({workerId:sw.workerId||null,workerName:sw.workerName,wagePerPiece:sw.wagePerPiece,totalWage:sw.totalWage})),
+    subWageTotal,
+    // Grand total wages (main + all subs)
+    totalWage:totalWageAll,
+    materialsUsed:used,
+    matCostPerPiece,
+    matCostSnapshot,
+    overheadsSnapshot,
+    ohCostPerPiece,
+    notes:document.getElementById('fp-notes').value.trim()
+  });
+
+  serials.forEach(sn=>{
+    DB.insert('finished',{
+      productionId:prod.id,
+      workerId:workerId||null,
+      workerName:wName,
+      product,
+      serialNumber:sn,
+      date,
+      mainWage:mainWageTotal/pieces,
+      subWorkersWage:subWageTotal/pieces,
+      totalWage:totalWageAll/pieces,
+      subWorkers:activeSubWorkers.map(sw=>({workerId:sw.workerId||null,workerName:sw.workerName,wagePerPiece:sw.wagePerPiece})),
+      materialsUsed:used,
+      matCostPerPiece,
+      ohCostPerPiece,
+      overheadsSnapshot,
+      sold:false
+    });
+  });
+
   closeModal('modal-production');renderProductions();renderWorkers();renderFinished();updateCounts();
   if(document.getElementById('page-worker-profile')?.classList.contains('active'))renderWorkerProfile();
-  toast(`${pieces} × "${product}" recorded — SN: ${serials.join(', ')}`);
+  const subNames=activeSubWorkers.map(sw=>sw.workerName).filter(Boolean).join(', ');
+  toast(`${pieces} × "${product}" recorded${subNames?' · Sub: '+subNames:''}`);
 }
 
 /* ═══════════ DELETE PRODUCTION ═══════════ */
@@ -1177,12 +1357,28 @@ function deleteProduction(prodId){
   if(soldSerials.length){toast(`Cannot delete — ${soldSerials.length} piece(s) already sold`,'danger');return;}
   const pieces=prod.piecesCount||1;
   if(!confirm(`Delete production batch?\nProduct: ${prod.product}\nWorker: ${prod.workerName}\nPieces: ${pieces}\nSerials: ${serials.join(', ')}\n\nMaterials will be returned to worker holdings.`))return;
+
   const worker=prod.workerId?DB.find('workers',prod.workerId):null;
   if(worker&&(prod.materialsUsed||[]).length){
     const holdings=[...(worker.holdings||[])];
     prod.materialsUsed.forEach(u=>{const returnQty=parseFloat(u.qty||0)*pieces;const h=holdings.find(h=>h.mat===u.mat);if(h)h.qty=parseFloat(h.qty||0)+returnQty;else holdings.push({mat:u.mat,qty:returnQty,unit:u.unit||''});});
-    DB.update('workers',worker.id,{holdings,totalJobs:Math.max(0,(worker.totalJobs||0)-pieces),totalEarned:Math.max(0,(worker.totalEarned||0)-parseFloat(prod.totalWage||0))});
+    DB.update('workers',worker.id,{
+      holdings,
+      totalJobs:Math.max(0,(worker.totalJobs||0)-pieces),
+      totalEarned:Math.max(0,(worker.totalEarned||0)-parseFloat(prod.mainWage||prod.totalWage||0))
+    });
   }
+
+  // Reverse sub-worker earnings
+  (prod.subWorkers||[]).forEach(sw=>{
+    if(!sw.workerId)return;
+    const sw_w=DB.find('workers',sw.workerId);if(!sw_w)return;
+    DB.update('workers',sw.workerId,{
+      totalJobs:Math.max(0,(sw_w.totalJobs||0)-pieces),
+      totalEarned:Math.max(0,(sw_w.totalEarned||0)-parseFloat(sw.totalWage||0))
+    });
+  });
+
   serials.forEach(sn=>{const fg=DB.all('finished').find(f=>f.serialNumber===sn&&f.productionId===prodId);if(fg)DB.delete('finished',fg.id);});
   DB.delete('productions',prodId);
   renderProductions();renderFinished();renderWorkers();updateCounts();
@@ -1206,7 +1402,7 @@ function renderProductions(){
       <div class="psb-divider"></div>
       <div class="psb-stat"><span class="psb-val">${totalPieces}</span><span class="psb-lbl">Pieces</span></div>
       <div class="psb-divider"></div>
-      <div class="psb-stat"><span class="psb-val psb-amber">${fmtMoney(totalWages)}</span><span class="psb-lbl">Wages</span></div>
+      <div class="psb-stat"><span class="psb-val psb-amber">${fmtMoney(totalWages)}</span><span class="psb-lbl">Total Wages</span></div>
       <div class="psb-divider"></div>
       <div class="psb-stat"><span class="psb-val psb-blue">${fmtMoney(totalMatCost)}</span><span class="psb-lbl">Mat. Cost</span></div>
       <div class="psb-divider"></div>
@@ -1218,9 +1414,22 @@ function renderProductions(){
         const matCost=parseFloat(p.matCostPerPiece||0);
         const ohCost=parseFloat(p.ohCostPerPiece||(p.overheadsSnapshot||[]).reduce((s,o)=>s+parseFloat(o.amount||0),0)||0);
         const pieces=p.piecesCount||1;
-        const wagePerPc=parseFloat(p.wagePerPiece||0)||(parseFloat(p.totalWage||0)/pieces);
-        const grandCostPc=matCost+ohCost+wagePerPc;
+        const mainWage=parseFloat(p.mainWage||p.totalWage||0);
+        const mainWagePer=parseFloat(p.wagePerPiece||0)||(mainWage/pieces);
+        const subWorkers=p.subWorkers||[];
+        const subWageTotal=parseFloat(p.subWageTotal||0)||subWorkers.reduce((s,sw)=>s+parseFloat(sw.totalWage||0),0);
+        const grandTotalWages=parseFloat(p.totalWage||0);
+        const grandCostPc=matCost+ohCost+(grandTotalWages/pieces);
         const ohTitle=(p.overheadsSnapshot||[]).map(o=>`${o.label}: ${fmtMoney(o.amount)}`).join('\n');
+
+        // Wage breakdown chips
+        const wageChips=`
+          <div class="wage-breakdown">
+            <span class="wb-chip">👷 ${p.workerName}: ${fmtMoney(mainWage)}</span>
+            ${subWorkers.map(sw=>`<span class="wb-chip wb-chip-sub">🔧 ${sw.workerName}: ${fmtMoney(sw.totalWage||0)}</span>`).join('')}
+            ${subWorkers.length>0?`<span class="wb-chip wb-chip-total">Σ ${fmtMoney(grandTotalWages)}</span>`:''}
+          </div>`;
+
         return `<div class="prod-card">
           <div class="prod-card-left"><div class="prod-card-icon">🏭</div></div>
           <div class="prod-card-body">
@@ -1233,16 +1442,25 @@ function renderProductions(){
                 <span class="prod-meta-chip prod-chip-worker" onclick="nav('worker-profile','${p.workerId}')"><span class="pmc-icon">👷</span>${p.workerName}</span>
                 <span class="prod-meta-chip">📅 ${fmtDate(p.date)}</span>
                 <span class="prod-meta-chip prod-chip-count">${pieces} pc${pieces>1?'s':''}</span>
+                ${subWorkers.length>0?`<span class="prod-meta-chip" style="background:var(--info-light);color:var(--info);border-color:#bfdbfe">🔧 ${subWorkers.length} sub-worker${subWorkers.length>1?'s':''}</span>`:''}
               </div>
             </div>
             <div class="prod-serials">${serials.map(s=>`<span class="prod-sn-tag">📟 ${s}</span>`).join('')}</div>
-            <div class="prod-card-costs">
-              <div class="pcc-item"><span class="pcc-label">Wage / pc</span><span class="pcc-value pcc-amber">${fmtMoney(wagePerPc)}</span></div>
-              ${matCost>0?`<div class="pcc-item"><span class="pcc-label">Mat. cost / pc</span><span class="pcc-value pcc-blue">${fmtMoney(matCost)}</span></div>`:''}
-              ${ohCost>0?`<div class="pcc-item" title="${ohTitle}" style="cursor:help"><span class="pcc-label">Overhead / pc ℹ</span><span class="pcc-value pcc-purple">${fmtMoney(ohCost)}</span></div>`:''}
-              ${grandCostPc>0?`<div class="pcc-item pcc-total"><span class="pcc-label">Total / pc</span><span class="pcc-value pcc-total-val">${fmtMoney(grandCostPc)}</span></div>`:''}
-              <div class="pcc-item pcc-total-wages"><span class="pcc-label">Total wages</span><span class="pcc-value pcc-amber">${fmtMoney(p.totalWage||0)}</span></div>
+
+            <!-- Wage Breakdown -->
+            <div class="prod-card-costs" style="flex-direction:column;gap:0.4rem">
+              <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-light)">Wage Breakdown</div>
+              ${wageChips}
+              <div style="display:flex;flex-wrap:wrap;gap:0.5rem 1.2rem;padding-top:0.4rem;border-top:1px solid var(--border-light)">
+                ${mainWagePer>0?`<div class="pcc-item"><span class="pcc-label">Main wage / pc</span><span class="pcc-value pcc-amber">${fmtMoney(mainWagePer)}</span></div>`:''}
+                ${subWorkers.length>0?`<div class="pcc-item"><span class="pcc-label">Sub wages total</span><span class="pcc-value" style="color:var(--info)">${fmtMoney(subWageTotal)}</span></div>`:''}
+                ${matCost>0?`<div class="pcc-item"><span class="pcc-label">Mat. cost / pc</span><span class="pcc-value pcc-blue">${fmtMoney(matCost)}</span></div>`:''}
+                ${ohCost>0?`<div class="pcc-item" title="${ohTitle}" style="cursor:help"><span class="pcc-label">Overhead / pc ℹ</span><span class="pcc-value pcc-purple">${fmtMoney(ohCost)}</span></div>`:''}
+                ${grandCostPc>0?`<div class="pcc-item pcc-total"><span class="pcc-label">Grand cost / pc</span><span class="pcc-value pcc-total-val">${fmtMoney(grandCostPc)}</span></div>`:''}
+                <div class="pcc-item pcc-total-wages"><span class="pcc-label">All wages</span><span class="pcc-value pcc-amber">${fmtMoney(grandTotalWages)}</span></div>
+              </div>
             </div>
+
             ${(p.materialsUsed||[]).length?`<div class="prod-mats-used"><span class="pmu-label">Materials used (per pc):</span>${p.materialsUsed.map(m=>`<span class="pmu-tag">${fmtNum(m.qty)} ${m.unit} ${m.mat}</span>`).join('')}</div>`:''}
             ${p.notes?`<div class="prod-notes">💬 ${p.notes}</div>`:''}
           </div>
@@ -1261,15 +1479,26 @@ function renderFinished(){
     <div class="stat-card"><span class="sc-ico">✅</span><div class="sc-lbl">Total Produced</div><div class="sc-val">${fin.length}</div></div>
     <div class="stat-card"><span class="sc-ico">📦</span><div class="sc-lbl">In Stock</div><div class="sc-val" style="color:var(--info)">${inStock}</div></div>
     <div class="stat-card"><span class="sc-ico">🧾</span><div class="sc-lbl">Sold</div><div class="sc-val" style="color:var(--success)">${fin.length-inStock}</div></div>
-    <div class="stat-card"><span class="sc-ico">💳</span><div class="sc-lbl">Wages Paid</div><div class="sc-val" style="font-size:1.2rem">${fmtMoney(fin.reduce((s,f)=>s+parseFloat(f.totalWage||0),0))}</div></div>
+    <div class="stat-card"><span class="sc-ico">💳</span><div class="sc-lbl">Total Wages</div><div class="sc-val" style="font-size:1.2rem">${fmtMoney(fin.reduce((s,f)=>s+parseFloat(f.totalWage||0),0))}</div></div>
     <div class="stat-card" style="border-color:var(--amber-light)"><span class="sc-ico">📦</span><div class="sc-lbl">Raw Mat. Cost</div><div class="sc-val" style="font-size:1.2rem;color:var(--amber-dark)">${fmtMoney(fin.reduce((s,f)=>s+parseFloat(f.matCostPerPiece||0),0))}</div></div>`;
   const pmap={};
   fin.forEach(f=>{const k=f.product;if(!pmap[k])pmap[k]={name:k,total:0,inStock:0,sold:0,matCost:0,wageTotal:0};pmap[k].total++;f.sold?pmap[k].sold++:pmap[k].inStock++;pmap[k].matCost+=parseFloat(f.matCostPerPiece||0);pmap[k].wageTotal+=parseFloat(f.totalWage||0);});
   const summaryRows=Object.values(pmap).sort((a,b)=>b.total-a.total);
   const list=document.getElementById('fg-list');if(!list)return;
-  list.innerHTML=(summaryRows.length?`<div class="card" style="margin-bottom:1.2rem"><div class="card-hdr"><span class="card-title">📊 Product Summary</span></div><div class="card-body" style="padding:0"><table class="data-table"><thead><tr><th>Product</th><th style="text-align:center">Total</th><th style="text-align:center">In Stock</th><th style="text-align:center">Sold</th><th style="text-align:right">Mat. Cost</th><th style="text-align:right">Wages</th></tr></thead><tbody>${summaryRows.map(p=>`<tr><td class="td-name">${p.name}</td><td class="td-mono" style="text-align:center"><strong>${p.total}</strong></td><td class="td-mono" style="text-align:center;color:var(--info)">${p.inStock}</td><td class="td-mono" style="text-align:center;color:var(--success)">${p.sold}</td><td class="td-mono" style="text-align:right;color:var(--amber-dark)">${fmtMoney(p.matCost)}</td><td class="td-mono" style="text-align:right">${fmtMoney(p.wageTotal)}</td></tr>`).join('')}</tbody></table></div></div>`:'')+(fl.length?fl.map(f=>{
+  list.innerHTML=(summaryRows.length?`<div class="card" style="margin-bottom:1.2rem"><div class="card-hdr"><span class="card-title">📊 Product Summary</span></div><div class="card-body" style="padding:0"><table class="data-table"><thead><tr><th>Product</th><th style="text-align:center">Total</th><th style="text-align:center">In Stock</th><th style="text-align:center">Sold</th><th style="text-align:right">Mat. Cost</th><th style="text-align:right">All Wages</th></tr></thead><tbody>${summaryRows.map(p=>`<tr><td class="td-name">${p.name}</td><td class="td-mono" style="text-align:center"><strong>${p.total}</strong></td><td class="td-mono" style="text-align:center;color:var(--info)">${p.inStock}</td><td class="td-mono" style="text-align:center;color:var(--success)">${p.sold}</td><td class="td-mono" style="text-align:right;color:var(--amber-dark)">${fmtMoney(p.matCost)}</td><td class="td-mono" style="text-align:right">${fmtMoney(p.wageTotal)}</td></tr>`).join('')}</tbody></table></div></div>`:'')+(fl.length?fl.map(f=>{
     const matCost=parseFloat(f.matCostPerPiece||0),ohCost=parseFloat(f.ohCostPerPiece||0);
-    return `<div class="fg-card"><div class="fg-icon">🪑</div><div class="fg-body"><div class="fg-product">${f.product}</div><div style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-tertiary);margin-bottom:0.25rem">📟 ${f.serialNumber||'—'}</div><div class="fg-meta"><span>👷 ${f.workerName}</span><span>📅 ${fmtDate(f.date)}</span>${f.sold?`<span class="badge badge-success" style="font-size:0.65rem">🧾 Sold</span>`:`<span class="badge badge-info" style="font-size:0.65rem">📦 In Stock</span>`}</div><div style="display:flex;gap:1rem;margin-top:0.3rem;font-size:0.75rem;flex-wrap:wrap"><span>💳 Wage: <strong>${fmtMoney(f.totalWage||0)}</strong></span>${matCost>0?`<span>📦 Mat.: <strong style="color:var(--amber-dark)">${fmtMoney(matCost)}</strong></span>`:''} ${ohCost>0?`<span>💡 OH: <strong style="color:var(--info)">${fmtMoney(ohCost)}</strong></span>`:''}${(matCost+ohCost+(f.totalWage||0))>0?`<span>Total: <strong>${fmtMoney(matCost+ohCost+(f.totalWage||0))}</strong></span>`:''}</div>${(f.materialsUsed||[]).length?`<div style="font-size:0.72rem;color:var(--text-light);margin-top:0.2rem">${f.materialsUsed.map(m=>`${fmtNum(m.qty)} ${m.unit} ${m.mat}`).join(' · ')}</div>`:''}</div><div class="acts" style="flex-direction:column;gap:0.4rem">${!f.sold?`<button class="btn btn-primary btn-sm" onclick="openSalesModal('${f.id}')">🧾 Sell</button>`:''}<button class="act-btn danger" onclick="deleteFG('${f.id}')">🗑</button></div></div>`;
+    const mainW=parseFloat(f.mainWage||f.totalWage||0), subW=parseFloat(f.subWorkersWage||0);
+    const subWorkers=f.subWorkers||[];
+    return `<div class="fg-card"><div class="fg-icon">🪑</div><div class="fg-body"><div class="fg-product">${f.product}</div><div style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-tertiary);margin-bottom:0.25rem">📟 ${f.serialNumber||'—'}</div><div class="fg-meta"><span>👷 ${f.workerName}</span><span>📅 ${fmtDate(f.date)}</span>${f.sold?`<span class="badge badge-success" style="font-size:0.65rem">🧾 Sold</span>`:`<span class="badge badge-info" style="font-size:0.65rem">📦 In Stock</span>`}</div>
+    <div style="display:flex;gap:0.5rem 1rem;margin-top:0.3rem;font-size:0.75rem;flex-wrap:wrap">
+      <span>💳 Main: <strong>${fmtMoney(mainW)}</strong></span>
+      ${subW>0?`<span style="color:var(--info)">🔧 Sub: <strong>${fmtMoney(subW)}</strong></span>`:''}
+      ${matCost>0?`<span>📦 Mat.: <strong style="color:var(--amber-dark)">${fmtMoney(matCost)}</strong></span>`:''}
+      ${ohCost>0?`<span>💡 OH: <strong style="color:var(--info)">${fmtMoney(ohCost)}</strong></span>`:''}
+      <span>Total cost: <strong>${fmtMoney(matCost+ohCost+mainW+subW)}</strong></span>
+    </div>
+    ${subWorkers.length>0?`<div style="font-size:0.7rem;color:var(--text-tertiary);margin-top:0.2rem">🔧 ${subWorkers.map(sw=>`${sw.workerName} (${fmtMoney(sw.wagePerPiece)}/pc)`).join(', ')}</div>`:''}
+    ${(f.materialsUsed||[]).length?`<div style="font-size:0.72rem;color:var(--text-light);margin-top:0.2rem">${f.materialsUsed.map(m=>`${fmtNum(m.qty)} ${m.unit} ${m.mat}`).join(' · ')}</div>`:''}</div><div class="acts" style="flex-direction:column;gap:0.4rem">${!f.sold?`<button class="btn btn-primary btn-sm" onclick="openSalesModal('${f.id}')">🧾 Sell</button>`:''}<button class="act-btn danger" onclick="deleteFG('${f.id}')">🗑</button></div></div>`;
   }).join(''):`<div class="table-card"><div class="t-empty"><span class="t-empty-ico">✅</span>${fin.length?'No results':'No finished goods yet'}</div></div>`);
 }
 function deleteFG(id){if(!confirm('Delete this record?'))return;DB.delete('finished',id);renderFinished();updateCounts();toast('Deleted','warning');}
@@ -1364,7 +1593,7 @@ function _renderCart(){
           <div style="display:flex;flex-wrap:wrap;gap:0.3rem 0.6rem;margin-top:0.2rem">
             ${it.matCostPerPiece>0?`<span style="font-size:0.68rem;color:var(--amber-dark)">📦 Mat: ${fmtMoney(it.matCostPerPiece)}</span>`:''}
             ${it.ohCostPerPiece>0?`<span style="font-size:0.68rem;color:var(--info)">💡 OH: ${fmtMoney(it.ohCostPerPiece)}</span>`:''}
-            ${it.totalWage>0?`<span style="font-size:0.68rem;color:var(--text-tertiary)">💳 Wage: ${fmtMoney(it.totalWage)}</span>`:''}
+            ${it.totalWage>0?`<span style="font-size:0.68rem;color:var(--text-tertiary)">💳 Wages: ${fmtMoney(it.totalWage)}</span>`:''}
             ${ic>0?`<span style="font-size:0.68rem;font-weight:700;color:var(--text-primary);background:var(--amber-pale);padding:0.05rem 0.35rem;border-radius:4px;border:1px solid var(--amber-light)">Total cost: ${fmtMoney(ic)}</span>`:''}
           </div>
         </div>
@@ -1488,7 +1717,7 @@ function renderReports(){
     <div class="stat-card"><span class="sc-ico">📦</span><div class="sc-lbl">Stock Value</div><div class="sc-val" style="font-size:1.1rem">${fmtMoney(stockVal)}</div></div>
     <div class="stat-card"><span class="sc-ico">👷</span><div class="sc-lbl">Workers</div><div class="sc-val">${workers.length}</div></div>
     <div class="stat-card"><span class="sc-ico">🏭</span><div class="sc-lbl">Productions</div><div class="sc-val">${prods.length}</div></div>
-    <div class="stat-card"><span class="sc-ico">💳</span><div class="sc-lbl">Wages</div><div class="sc-val" style="font-size:1.1rem">${fmtMoney(wages)}</div></div>
+    <div class="stat-card"><span class="sc-ico">💳</span><div class="sc-lbl">All Wages</div><div class="sc-val" style="font-size:1.1rem">${fmtMoney(wages)}</div></div>
     <div class="stat-card"><span class="sc-ico">💰</span><div class="sc-lbl">Revenue</div><div class="sc-val" style="font-size:1.1rem;color:var(--success)">${fmtMoney(revenue)}</div></div>
     <div class="stat-card" style="border-color:${revenue-wages>=0?'var(--success-light)':'var(--danger-light)'}"><span class="sc-ico">${revenue-wages>=0?'📈':'📉'}</span><div class="sc-lbl">Gross Profit</div><div class="sc-val" style="font-size:1.1rem;color:${revenue-wages>=0?'var(--success)':'var(--danger)'}">${fmtMoney(revenue-wages)}</div></div>
     <div class="stat-card"><span class="sc-ico">⚠️</span><div class="sc-lbl">Low/Out Stock</div><div class="sc-val" style="color:${mats.filter(m=>stockStatus(m)!=='ok').length?'var(--warning)':'var(--success)'}">${mats.filter(m=>stockStatus(m)!=='ok').length}</div></div>
@@ -1509,7 +1738,7 @@ function confirmDeleteAllData(){
   DB.clearAll();updateCounts();renderDashboard();toast('All data deleted','warning');
 }
 
-/* ═══════════ MODALS ═══════════ */
+/* ═══════════ MODALS HTML ═══════════ */
 function createModals(){
   document.getElementById('modals-container').innerHTML=`
 
@@ -1542,7 +1771,6 @@ function createModals(){
     </div>
   </div>
 
-  <!-- DISTRIBUTE BILL TO WORKER -->
   <div class="modal-backdrop" id="modal-distribute">
     <div class="modal modal-lg">
       <div class="modal-hdr">
@@ -1602,26 +1830,58 @@ function createModals(){
     </div>
   </div>
 
+  <!-- ═══════════ PRODUCTION MODAL — Multi-Level Wages ═══════════ -->
   <div class="modal-backdrop" id="modal-production">
     <div class="modal modal-lg"><div class="modal-hdr"><div><h3 class="modal-title">Record Production</h3><p class="modal-sub">Materials deducted from worker holdings</p></div><button class="modal-close" onclick="closeModal('modal-production')">×</button></div>
     <div class="modal-body">
+
+      <!-- Product Details -->
       <div class="approve-section">
         <p class="section-label">Product Details</p>
         <div class="form-row three">
-          <div class="field-group"><label>Worker *</label><div class="combo-wrap"><input class="finput" id="fp-worker-search" type="text" placeholder="Select worker…" autocomplete="off"/><div class="combo-drop" id="fp-worker-drop"></div><input type="hidden" id="fp-worker-id"/></div></div>
+          <div class="field-group"><label>Main Worker *</label><div class="combo-wrap"><input class="finput" id="fp-worker-search" type="text" placeholder="Select worker…" autocomplete="off"/><div class="combo-drop" id="fp-worker-drop"></div><input type="hidden" id="fp-worker-id"/></div></div>
           <div class="field-group"><label>Product Template</label><div class="combo-wrap"><input class="finput" id="fp-template-search" type="text" placeholder="Load template…" autocomplete="off"/><div class="combo-drop" id="fp-template-drop"></div></div></div>
           <div class="field-group"><label>Date *</label><input class="finput" id="fp-date" type="date"/></div>
         </div>
         <div class="form-row"><div class="field-group"><label>Product Name *</label><input class="finput" id="fp-product" type="text" placeholder="e.g. Teak Chair…"/></div><div class="field-group"><label>No. of Pieces *</label><input class="finput" id="fp-pieces" type="number" min="1" step="1" value="1"/></div></div>
         <div style="margin-top:0.4rem"><div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--amber-dark);margin-bottom:0.5rem">Serial Numbers</div><div id="fp-serial-rows"></div></div>
       </div>
-      <div class="approve-section"><p class="section-label">Wage</p>
-        <div class="form-row three">
-          <div class="field-group"><label>Wage per Piece (₹)</label><input class="finput" id="fp-wage-per" type="number" min="0" step="1" placeholder="0"/></div>
-          <div class="field-group"><label>Pieces</label><input class="finput" id="fp-wage-pcs" type="number" min="1" step="1" value="1" readonly style="background:var(--bg-secondary)"/></div>
-          <div class="field-group"><label>Total Wage (₹)</label><input class="finput" id="fp-wage-total" type="number" min="0" step="1" placeholder="0" style="font-weight:700"/></div>
+
+      <!-- Wage Section — Multi Level -->
+      <div class="approve-section" style="padding:0;overflow:hidden;border-radius:10px;border:1px solid var(--border)">
+        <!-- Header bar -->
+        <div class="wage-section-hdr">
+          <span class="wage-section-title">💳 Wages — All Workers</span>
+          <span class="wage-section-total" id="fp-wage-grand-total" style="color:rgba(255,255,255,0.3)">₹0.00</span>
+        </div>
+        <div style="padding:0.75rem 0.85rem;display:flex;flex-direction:column;gap:0.6rem">
+          <!-- Main worker wage -->
+          <div>
+            <div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--amber-dark);margin-bottom:0.35rem">Main Worker</div>
+            <div class="main-wage-row">
+              <div class="main-wage-label">👷 <span id="fp-main-worker-label" style="font-style:italic;color:var(--text-tertiary)">Select worker above</span></div>
+              <input class="finput" id="fp-main-wage-per" type="number" min="0" step="1" placeholder="₹ per piece"/>
+              <input class="finput" id="fp-main-wage-total" type="number" min="0" step="1" placeholder="Total ₹" style="font-weight:700;background:var(--bg-secondary)" readonly/>
+            </div>
+          </div>
+
+          <!-- Sub-workers divider -->
+          <div class="sub-worker-divider">Sub-Workers</div>
+
+          <!-- Sub-worker column headers -->
+          <div style="display:grid;grid-template-columns:1fr 110px 90px 28px;gap:0.4rem;font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-light);padding:0 0.1rem">
+            <span>Worker Name</span><span>₹ / Piece</span><span>Total ₹</span><span></span>
+          </div>
+
+          <!-- Sub-worker rows container -->
+          <div id="fp-sub-workers-wrap">
+            <div style="font-size:0.78rem;color:var(--text-light);text-align:center;padding:0.5rem;border:1px dashed var(--border);border-radius:8px">No sub-workers added</div>
+          </div>
+          <button class="add-row-btn" id="fp-add-sub-worker" style="margin:0">+ Add Sub-Worker</button>
         </div>
       </div>
+
+      <!-- Materials -->
       <div class="approve-section"><p class="section-label">Materials Used <span style="font-weight:400;font-size:0.7rem;color:var(--text-tertiary)">(per piece)</span></p>
         <p class="section-hint" id="fp-holdings-hint">Select a worker first.</p>
         <div id="fp-holdings-list"></div>
@@ -1630,6 +1890,7 @@ function createModals(){
         <div id="fp-mat-cost" style="margin-top:0.6rem"></div>
         <div id="fp-overhead-preview"></div>
       </div>
+
       <div class="form-row"><div class="field-group fg-full"><label>Notes</label><input class="finput" id="fp-notes" type="text" placeholder="Optional…"/></div></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('modal-production')">Cancel</button><button class="btn btn-success" id="fp-save">✅ Record Production</button></div>
@@ -1725,5 +1986,26 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('fg-search')?.addEventListener('input',renderFinished);
   document.getElementById('sales-search')?.addEventListener('input',renderSales);
   document.getElementById('import-file-input')?.addEventListener('change',e=>importDataJSON(e.target.files[0]));
+
+  // Wire main worker label update when worker is selected
+  const origBuildComboWorker = ()=>{};
+  const workerLabelUpdate = (val) => {
+    const lbl = document.getElementById('fp-main-worker-label');
+    if(lbl) lbl.textContent = val || 'Select worker above';
+    if(lbl) lbl.style.fontStyle = val ? 'normal' : 'italic';
+    if(lbl) lbl.style.color = val ? 'var(--amber-dark)' : 'var(--text-tertiary)';
+  };
+  // Patch buildCombo for fp-worker-search to also update label
+  const _origNav = nav;
+
   updateDate();setInterval(updateDate,60000);updateCounts();nav('dashboard');
+
+  // After DOMContentLoaded, patch fp-worker-search to update label
+  document.addEventListener('input', e => {
+    if(e.target && e.target.id === 'fp-worker-search') {
+      const lbl = document.getElementById('fp-main-worker-label');
+      const val = e.target.value.trim();
+      if(lbl){ lbl.textContent = val||'Select worker above'; lbl.style.fontStyle=val?'normal':'italic'; lbl.style.color=val?'var(--amber-dark)':'var(--text-tertiary)'; }
+    }
+  });
 });
