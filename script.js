@@ -1,6 +1,6 @@
 const DB = (() => {
   const PFX  = 'vi3_';
-  const COLS = ['materials','bills','workers','templates','issuances','productions','finished','sales'];
+  const COLS = ['materials','bills','workers','templates','issuances','productions','finished','sales','wagePayments'];
   const _c   = {};
   COLS.forEach(c => { try { _c[c] = JSON.parse(localStorage.getItem(PFX+c)||'[]'); } catch { _c[c]=[]; } });
   const save = c => { try { localStorage.setItem(PFX+c, JSON.stringify(_c[c])); } catch { setTimeout(()=>toast('Storage full!','danger'),100); } };
@@ -565,7 +565,9 @@ function deleteWorker(id){
   DB.delete('workers',id); renderWorkers(); updateCounts(); toast('Deleted','warning');
 }
 
-/* ═══════════ WORKER PROFILE ═══════════ */
+/* ═══════════════════════════════════════════════════════
+   WORKER PROFILE — Tabbed (Overview / Monthly Wages / Production History)
+   ═══════════════════════════════════════════════════════ */
 function renderWorkerProfile(){
   const wid=_profileWid, pageEl=document.getElementById('page-worker-profile'); if(!pageEl)return;
   if(!wid){pageEl.innerHTML='<div class="page-inner"><div class="t-empty">No worker selected</div></div>';return;}
@@ -573,12 +575,12 @@ function renderWorkerProfile(){
   if(!worker){pageEl.innerHTML='<div class="page-inner"><div class="t-empty">Worker not found</div></div>';return;}
   const bc=document.getElementById('bc-page'); if(bc)bc.textContent=`Profile — ${worker.name}`;
   const holdings=worker.holdings||[];
-  // Productions where this worker is main OR sub-worker
   const prods=DB.where('productions',p=>p.workerId===wid||(p.subWorkers||[]).some(sw=>sw.workerId===wid));
   const fin=DB.where('finished',f=>f.workerId===wid);
   const totalHoldingValue=holdings.reduce((s,h)=>{const m=DB.all('materials').find(m=>m.name===h.mat);return s+parseFloat(h.qty||0)*parseFloat(m?.unitCost||0);},0);
   const totalMatUsedValue=fin.reduce((s,f)=>s+parseFloat(f.matCostPerPiece||0),0);
   const issuances=DB.where('issuances',i=>i.workerId===wid||i.workerName===worker.name);
+
   pageEl.innerHTML=`<div class="page-inner">
     <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-bottom:1.2rem">
       <button class="btn btn-ghost btn-sm" onclick="nav('workers')">← Workers</button>
@@ -586,6 +588,8 @@ function renderWorkerProfile(){
       <button class="btn btn-success btn-sm" onclick="openProductionModal('${wid}')">✅ Record Production</button>
       <button class="btn btn-ghost btn-sm" style="background:var(--info-light);color:var(--info);border-color:#bfdbfe" onclick="openReturnStockModal('${wid}')">↩ Return to Stock</button>
     </div>
+
+    <!-- Worker Header Card -->
     <div class="card" style="margin-bottom:1.2rem">
       <div class="card-hdr" style="background:var(--amber-pale)">
         <div style="display:flex;align-items:center;gap:1rem">
@@ -600,60 +604,241 @@ function renderWorkerProfile(){
         </div>
       </div>
     </div>
-    <div class="two-col">
-      <div class="card" id="wp-holdings-card" style="border-color:${holdings.length?'var(--amber)':'var(--border)'}">
-        <div class="card-hdr" style="${holdings.length?'background:var(--amber-pale)':''}">
-          <span class="card-title" style="${holdings.length?'color:var(--amber-dark)':''}">📦 Currently Holding</span>
-          <div style="display:flex;gap:0.4rem;align-items:center">
-            ${holdings.length?`<span id="wp-holding-val" style="font-size:0.72rem;font-family:var(--font-mono);color:var(--amber-dark)">${fmtMoney(totalHoldingValue)}</span>`:''}
-            ${holdings.length?`<button class="btn btn-ghost btn-sm" onclick="openReturnStockModal('${wid}')">↩ Return</button>`:''}
-            <button class="btn btn-ghost btn-sm" id="wp-holding-edit-btn" onclick="toggleHoldingEdit('${wid}')">✏️ Edit</button>
+
+    <!-- Tab Bar -->
+    <div class="wp-tab-bar">
+      <button class="wp-tab active" data-wptab="overview" onclick="wpSwitchTab('overview')">Overview</button>
+      <button class="wp-tab" data-wptab="wages" onclick="wpSwitchTab('wages')">💳 Monthly Wages</button>
+      <button class="wp-tab" data-wptab="history" onclick="wpSwitchTab('history')">📋 Production History</button>
+    </div>
+
+    <!-- Overview Pane -->
+    <div class="wp-pane active" id="wp-pane-overview">
+      <div class="two-col">
+        <div class="card" id="wp-holdings-card" style="border-color:${holdings.length?'var(--amber)':'var(--border)'}">
+          <div class="card-hdr" style="${holdings.length?'background:var(--amber-pale)':''}">
+            <span class="card-title" style="${holdings.length?'color:var(--amber-dark)':''}">📦 Currently Holding</span>
+            <div style="display:flex;gap:0.4rem;align-items:center">
+              ${holdings.length?`<span id="wp-holding-val" style="font-size:0.72rem;font-family:var(--font-mono);color:var(--amber-dark)">${fmtMoney(totalHoldingValue)}</span>`:''}
+              ${holdings.length?`<button class="btn btn-ghost btn-sm" onclick="openReturnStockModal('${wid}')">↩ Return</button>`:''}
+              <button class="btn btn-ghost btn-sm" id="wp-holding-edit-btn" onclick="toggleHoldingEdit('${wid}')">✏️ Edit</button>
+            </div>
+          </div>
+          <div class="card-body" id="wp-holdings-body">${_renderHoldingsView(holdings)}</div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">🪑 Finished Products</span></div>
+          <div class="card-body">
+            ${fin.length?fin.slice(0,8).map(f=>`<div class="dash-row" style="gap:0.5rem">
+              <div>
+                <div style="font-weight:600">${f.product}</div>
+                <div style="font-size:0.7rem;font-family:var(--font-mono);color:var(--text-tertiary)">SN: ${f.serialNumber||'—'} · ${fmtDate(f.date)}</div>
+                <div style="font-size:0.72rem;color:var(--text-tertiary)">💳 ${fmtMoney(f.totalWage||0)} wage${f.matCostPerPiece?` · 📦 ${fmtMoney(f.matCostPerPiece)} mat.`:''}</div>
+              </div>
+              ${f.sold?`<span class="badge badge-success" style="font-size:0.65rem;flex-shrink:0">Sold</span>`:`<button class="btn btn-primary btn-sm" onclick="openSalesModal('${f.id}')" style="flex-shrink:0">🧾 Sell</button>`}
+            </div>`).join(''):'<div class="dash-empty">No products yet</div>'}
           </div>
         </div>
-        <div class="card-body" id="wp-holdings-body">${_renderHoldingsView(holdings)}</div>
       </div>
-      <div class="card">
-        <div class="card-hdr"><span class="card-title">🪑 Finished Products</span></div>
-        <div class="card-body">
-          ${fin.length?fin.slice(0,8).map(f=>`<div class="dash-row" style="gap:0.5rem">
-            <div>
-              <div style="font-weight:600">${f.product}</div>
-              <div style="font-size:0.7rem;font-family:var(--font-mono);color:var(--text-tertiary)">SN: ${f.serialNumber||'—'} · ${fmtDate(f.date)}</div>
-              <div style="font-size:0.72rem;color:var(--text-tertiary)">💳 ${fmtMoney(f.totalWage||0)} wage${f.matCostPerPiece?` · 📦 ${fmtMoney(f.matCostPerPiece)} mat.`:''}</div>
-            </div>
-            ${f.sold?`<span class="badge badge-success" style="font-size:0.65rem;flex-shrink:0">Sold</span>`:`<button class="btn btn-primary btn-sm" onclick="openSalesModal('${f.id}')" style="flex-shrink:0">🧾 Sell</button>`}
-          </div>`).join(''):'<div class="dash-empty">No products yet</div>'}
-        </div>
-      </div>
+      ${_renderIssuanceTimeline(issuances, worker)}
     </div>
-    <div class="card" style="margin-top:1.2rem">
-      <div class="card-hdr"><span class="card-title">📋 Production History</span></div>
-      <div class="card-body" style="padding:0">
-        ${prods.length?`<table class="data-table">
-          <thead><tr><th>Product</th><th>Role</th><th>Serial No.</th><th>Date</th><th>Pieces</th><th>My Wage</th><th>Total Wages</th><th>Materials Used</th></tr></thead>
-          <tbody>${prods.map(p=>{
-            const isMain=p.workerId===wid;
-            const subEntry=(p.subWorkers||[]).find(sw=>sw.workerId===wid);
-            const myWage=isMain?parseFloat(p.mainWage||p.totalWage||0):parseFloat(subEntry?.totalWage||0);
-            const ohCost=(p.overheadsSnapshot||[]).reduce((s,o)=>s+parseFloat(o.amount||0),0);
-            return `<tr>
-              <td class="td-name">${p.product}</td>
-              <td>${isMain?`<span class="badge badge-amber" style="font-size:0.65rem">👷 Main</span>`:`<span class="badge badge-primary" style="font-size:0.65rem">🔧 Sub</span>`}</td>
-              <td style="font-family:var(--font-mono);font-size:0.74rem">${(p.serialNumbers||[p.serialNumber||'—']).join(', ')}</td>
-              <td class="td-mono">${fmtDate(p.date)}</td>
-              <td class="td-mono">${p.piecesCount||1}</td>
-              <td class="td-mono" style="color:var(--amber-dark);font-weight:700">${fmtMoney(myWage)}</td>
-              <td class="td-mono">${fmtMoney(p.totalWage||0)}</td>
-              <td style="font-size:0.74rem;color:var(--text-tertiary)">${(p.materialsUsed||[]).map(m=>`${fmtNum(m.qty)} ${m.unit} ${m.mat}`).join(', ')||'—'}</td>
-            </tr>`;
-          }).join('')}</tbody>
-        </table>`:'<div class="t-empty"><span class="t-empty-ico">🏭</span>No production yet</div>'}
-      </div>
+
+    <!-- Monthly Wages Pane -->
+    <div class="wp-pane" id="wp-pane-wages">
+      ${_renderMonthlyWages(wid, worker, prods)}
     </div>
-    ${_renderIssuanceTimeline(issuances, worker)}
+
+    <!-- Production History Pane -->
+    <div class="wp-pane" id="wp-pane-history">
+      ${_renderProductionHistory(wid, prods)}
+    </div>
   </div>`;
 }
 
+function wpSwitchTab(tab){
+  document.querySelectorAll('.wp-tab').forEach(b=>b.classList.toggle('active', b.dataset.wptab===tab));
+  document.querySelectorAll('.wp-pane').forEach(p=>p.classList.toggle('active', p.id===`wp-pane-${tab}`));
+}
+
+/* ─── Monthly Wage Helpers ─── */
+function _getMonthKey(dateStr){
+  if(!dateStr)return'';
+  const d=new Date(dateStr+'T12:00:00');
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function _monthLabel(key){
+  if(!key)return'General';
+  const [y,m]=key.split('-');
+  return new Date(parseInt(y),parseInt(m)-1,1).toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+}
+
+function _renderMonthlyWages(wid, worker, prods){
+  // Build earnings map from productions
+  const monthMap={};
+  prods.forEach(p=>{
+    const key=_getMonthKey(p.date); if(!key)return;
+    if(!monthMap[key])monthMap[key]={earned:0,pieces:0};
+    const isMain=p.workerId===wid;
+    const subEntry=(p.subWorkers||[]).find(sw=>sw.workerId===wid);
+    const myWage=isMain?parseFloat(p.mainWage||p.totalWage||0):parseFloat(subEntry?.totalWage||0);
+    monthMap[key].earned+=myWage;
+    monthMap[key].pieces+=(p.piecesCount||1);
+  });
+
+  // Load payments for this worker
+  const payments=DB.where('wagePayments',p=>p.workerId===wid);
+  const payByMonth={};
+  payments.forEach(p=>{
+    const key=p.monthKey||'general';
+    if(!payByMonth[key])payByMonth[key]=[];
+    payByMonth[key].push(p);
+  });
+
+  // All months that have any data
+  const allKeys=[...new Set([...Object.keys(monthMap),...payments.map(p=>p.monthKey||'general').filter(k=>k!=='general')])].sort().reverse();
+
+  const totalEarned=Object.values(monthMap).reduce((s,m)=>s+m.earned,0);
+  const totalPaid=payments.reduce((s,p)=>s+parseFloat(p.amount||0),0);
+  const totalBalance=totalEarned-totalPaid;
+
+  const allPayments=[...payments].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+
+  return `
+  <div class="stat-grid" style="margin-bottom:1.2rem">
+    <div class="stat-card"><span class="sc-ico">💰</span><div class="sc-lbl">Total Earned</div><div class="sc-val" style="font-size:1.1rem">${fmtMoney(totalEarned)}</div><div class="sc-sub">from ${prods.length} batch(es)</div></div>
+    <div class="stat-card" style="border-color:var(--success-light)"><span class="sc-ico">✅</span><div class="sc-lbl">Total Paid</div><div class="sc-val" style="font-size:1.1rem;color:var(--success)">${fmtMoney(totalPaid)}</div><div class="sc-sub">${payments.length} payment(s)</div></div>
+    <div class="stat-card" style="border-color:${totalBalance>0?'var(--danger-light)':'var(--success-light)'}"><span class="sc-ico">${totalBalance>0?'⚠':'✓'}</span><div class="sc-lbl">Balance Due</div><div class="sc-val" style="font-size:1.1rem;color:${totalBalance>0?'var(--danger)':'var(--success)'}">${fmtMoney(Math.abs(totalBalance))}</div><div class="sc-sub" style="color:${totalBalance>0?'var(--danger)':'var(--success)'}">${totalBalance>0?'Unpaid':'Fully paid'}</div></div>
+  </div>
+
+  <!-- Month-by-Month Table -->
+  <div class="card" style="margin-bottom:1.2rem">
+    <div class="card-hdr">
+      <span class="card-title">📅 Month-by-Month Breakdown</span>
+      <button class="act-btn" onclick="openWagePaymentModal('${wid}','',0)">+ Record Payment</button>
+    </div>
+    <div class="card-body" style="padding:0">
+      <div style="display:grid;grid-template-columns:110px 1fr 1fr 1fr auto;gap:0;padding:0.5rem 1rem;background:var(--bg-secondary);border-bottom:1px solid var(--border)">
+        <span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-tertiary)">Month</span>
+        <span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-tertiary)">Earned</span>
+        <span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-tertiary)">Paid</span>
+        <span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-tertiary)">Balance</span>
+        <span></span>
+      </div>
+      ${allKeys.length ? allKeys.map(key=>{
+        const earned=parseFloat(monthMap[key]?.earned||0);
+        const paid=(payByMonth[key]||[]).reduce((s,p)=>s+parseFloat(p.amount||0),0);
+        const bal=Math.round((earned-paid)*100)/100;
+        const fullyPaid=earned>0&&bal<=0;
+        const overPaid=bal<0;
+        return `<div style="display:grid;grid-template-columns:110px 1fr 1fr 1fr auto;align-items:center;gap:0.5rem;padding:0.75rem 1rem;border-bottom:1px solid var(--border-light)">
+          <span style="font-weight:600;font-size:0.82rem;color:var(--text-primary)">${_monthLabel(key)}</span>
+          <span style="font-family:var(--font-mono);font-size:0.8rem;color:var(--text-secondary)">${earned>0?fmtMoney(earned):'—'}</span>
+          <span style="font-family:var(--font-mono);font-size:0.8rem;color:var(--success)">${paid>0?fmtMoney(paid):'—'}</span>
+          <span style="font-family:var(--font-mono);font-size:0.84rem;font-weight:700;color:${bal>0?'var(--danger)':overPaid?'var(--info)':'var(--success)'}">
+            ${bal>0?fmtMoney(bal):overPaid?`+${fmtMoney(Math.abs(bal))} advance`:'Paid ✓'}
+          </span>
+          <div style="display:flex;gap:0.35rem;align-items:center;flex-wrap:wrap">
+            ${earned>0&&bal>0?`<button class="act-btn" onclick="openWagePaymentModal('${wid}','${key}',${bal})">💸 Pay ${fmtMoney(bal)}</button>`:''}
+            ${earned>0&&bal>0?`<button class="act-btn" style="font-size:0.72rem" onclick="openWagePaymentModal('${wid}','${key}',0)">Part pay</button>`:''}
+            ${fullyPaid?`<span class="badge badge-success" style="font-size:0.65rem">Paid</span>`:''}
+            ${earned<=0&&paid<=0?`<span style="font-size:0.72rem;color:var(--text-light)">No work</span>`:''}
+          </div>
+        </div>`;
+      }).join('') : `<div class="t-empty" style="padding:2rem 0"><span class="t-empty-ico">📭</span>No production data yet</div>`}
+    </div>
+  </div>
+
+  <!-- Payment Timeline -->
+  <div class="card">
+    <div class="card-hdr">
+      <span class="card-title">💳 Payment Timeline</span>
+      <span style="font-size:0.75rem;font-family:var(--font-mono);color:var(--success)">${allPayments.length} payment(s) · ${fmtMoney(totalPaid)}</span>
+    </div>
+    <div class="card-body" style="padding:0">
+      ${allPayments.length ? `
+        <div style="position:relative;padding-left:2.5rem">
+          <div style="position:absolute;left:1.25rem;top:0;bottom:0;width:2px;background:var(--border-light)"></div>
+          ${allPayments.map((p,idx)=>`
+            <div style="position:relative;padding:0.75rem 1rem 0.75rem 0.5rem;border-bottom:1px solid var(--border-light)">
+              <div style="position:absolute;left:-0.55rem;top:1rem;width:10px;height:10px;border-radius:50%;background:var(--success);border:2px solid var(--bg-card)"></div>
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem">
+                <div>
+                  <div style="font-weight:600;font-size:0.84rem;color:var(--text-primary)">${p.notes||'Wage payment'}</div>
+                  <div style="font-size:0.72rem;color:var(--text-tertiary);margin-top:0.15rem">${fmtDate(p.date)} · ${p.monthKey?_monthLabel(p.monthKey):'General'}</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0">
+                  <span style="font-family:var(--font-mono);font-weight:700;color:var(--success);font-size:0.9rem">${fmtMoney(p.amount)}</span>
+                  <button class="act-btn danger" style="font-size:0.65rem;padding:0.2rem 0.45rem" onclick="deleteWagePayment('${wid}','${p.id}')">🗑</button>
+                </div>
+              </div>
+            </div>`).join('')}
+        </div>
+      ` : `<div class="t-empty" style="padding:2rem 0"><span class="t-empty-ico">💳</span>No payments recorded yet.<br><button class="btn btn-primary btn-sm" style="margin-top:0.75rem" onclick="openWagePaymentModal('${wid}','',0)">+ Record First Payment</button></div>`}
+    </div>
+  </div>
+  <p style="font-size:0.72rem;color:var(--text-tertiary);margin-top:0.75rem;font-style:italic">* Wages include this worker's earnings as main worker and as sub-worker across all productions.</p>`;
+}
+
+/* ─── Production History (serial numbers, no total wages, no materials used) ─── */
+function _renderProductionHistory(wid, prods){
+  if(!prods.length)return`<div class="t-empty" style="padding:3rem 0"><span class="t-empty-ico">🏭</span>No production recorded yet</div>`;
+  return `<div class="table-card">
+    <table class="data-table">
+      <thead><tr><th>Product</th><th>Role</th><th>Serial No(s).</th><th>Date</th><th>Pieces</th><th>My Wage</th></tr></thead>
+      <tbody>${prods.map(p=>{
+        const isMain=p.workerId===wid;
+        const subEntry=(p.subWorkers||[]).find(sw=>sw.workerId===wid);
+        const myWage=isMain?parseFloat(p.mainWage||p.totalWage||0):parseFloat(subEntry?.totalWage||0);
+        const serials=p.serialNumbers||[p.serialNumber||'—'];
+        return `<tr>
+          <td class="td-name">${p.product}</td>
+          <td>${isMain?`<span class="badge badge-amber" style="font-size:0.65rem">👷 Main</span>`:`<span class="badge badge-primary" style="font-size:0.65rem">🔧 Sub</span>`}</td>
+          <td style="font-size:0.74rem">${serials.map(s=>`<span style="display:inline-block;background:var(--bg-secondary);border:1px solid var(--border);border-radius:5px;padding:0.1rem 0.45rem;margin:0.1rem;font-family:var(--font-mono)">${s}</span>`).join(' ')}</td>
+          <td class="td-mono">${fmtDate(p.date)}</td>
+          <td class="td-mono" style="text-align:center">${p.piecesCount||1}</td>
+          <td class="td-mono" style="color:var(--amber-dark);font-weight:700">${fmtMoney(myWage)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+    <div class="table-foot">
+      <span>${prods.length} production batch(es)</span>
+      <span>Total my wages: ${fmtMoney(prods.reduce((s,p)=>{const isMain=p.workerId===wid;const sub=(p.subWorkers||[]).find(sw=>sw.workerId===wid);return s+(isMain?parseFloat(p.mainWage||p.totalWage||0):parseFloat(sub?.totalWage||0));},0))}</span>
+    </div>
+  </div>`;
+}
+
+/* ─── Wage Payment Modal ─── */
+let _wagePayWid=null, _wagePayMonthKey=null;
+function openWagePaymentModal(wid, monthKey, suggestedAmt){
+  _wagePayWid=wid; _wagePayMonthKey=monthKey||null;
+  const worker=DB.find('workers',wid);
+  document.getElementById('wp-modal-worker').textContent=worker?.name||'';
+  document.getElementById('wp-modal-month').textContent=monthKey?_monthLabel(monthKey):'General payment';
+  document.getElementById('wp-modal-amount').value=suggestedAmt>0?suggestedAmt.toFixed(0):'';
+  document.getElementById('wp-modal-date').value=todayStr();
+  document.getElementById('wp-modal-notes').value='';
+  openModal('modal-wage-payment');
+  setTimeout(()=>document.getElementById('wp-modal-amount')?.focus(),100);
+}
+function saveWagePayment(){
+  const amt=parseFloat(document.getElementById('wp-modal-amount').value);
+  if(!amt||amt<=0){toast('Enter a valid amount','danger');return;}
+  const date=document.getElementById('wp-modal-date').value;
+  const notes=document.getElementById('wp-modal-notes').value.trim();
+  if(!date){toast('Select a date','danger');return;}
+  DB.insert('wagePayments',{workerId:_wagePayWid,monthKey:_wagePayMonthKey||null,amount:amt,date,notes});
+  closeModal('modal-wage-payment');
+  renderWorkerProfile();
+  toast(`Payment of ${fmtMoney(amt)} recorded ✅`);
+}
+function deleteWagePayment(wid, payId){
+  if(!confirm('Delete this payment record?'))return;
+  DB.delete('wagePayments',payId);
+  renderWorkerProfile();
+  toast('Payment deleted','warning');
+}
+
+/* ═══════════ HOLDINGS EDIT ═══════════ */
 function _renderHoldingsView(holdings){
   if(!holdings.length) return '<div class="dash-empty" style="color:var(--success)">✓ Not holding any materials</div>';
   return `<table class="data-table" style="font-size:0.82rem">
@@ -731,7 +916,7 @@ function saveHoldingEdit(wid){
   newRows.forEach(h=>{newMap[h.mat]=(newMap[h.mat]||0)+parseFloat(h.qty||0);});
   const allMats=new Set([...Object.keys(oldMap),...Object.keys(newMap)]);
   const adjustments=[];
-  allMats.forEach(mat=>{ const delta=( newMap[mat]||0)-(oldMap[mat]||0); if(Math.abs(delta)<0.0001)return; DB.adjustStock(mat,-delta); adjustments.push({mat,delta}); });
+  allMats.forEach(mat=>{ const delta=(newMap[mat]||0)-(oldMap[mat]||0); if(Math.abs(delta)<0.0001)return; DB.adjustStock(mat,-delta); adjustments.push({mat,delta}); });
   DB.update('workers',wid,{holdings:newRows});
   _holdingEditMode=false; _holdingEditOldSnapshot=[];
   const msgs=adjustments.map(a=>a.delta<0?`+${fmtNum(Math.abs(a.delta))} ${a.mat} returned`:`-${fmtNum(a.delta)} ${a.mat} deducted`);
@@ -1033,9 +1218,9 @@ function renderTemplates(){
 }
 function deleteTemplate(id){if(!confirm('Delete this template?'))return;DB.delete('templates',id);renderTemplates();updateCounts();toast('Deleted','warning');}
 
-/* ═══════════════════════════════════════════
+/* ═══════════════════════════════════════════════════
    PRODUCTION ENTRY — Multi-Level Wage System
-   ═══════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════ */
 let _prodMatRows=[], _prodPreWid=null, _prodOverheadsSnapshot=[], _prodSubWorkerRows=[];
 let _prodSubWCount = 0;
 
@@ -1062,7 +1247,6 @@ function openProductionModal(preWid=null){
   buildCombo('fp-worker-search','fp-worker-drop',DB.all('workers').map(w=>w.name),val=>{const w=DB.all('workers').find(w=>w.name===val);if(!w)return;document.getElementById('fp-worker-id').value=w.id;_loadWorkerForProd(w);});
   buildCombo('fp-template-search','fp-template-drop',DB.all('templates').map(t=>t.name),val=>{const t=DB.all('templates').find(t=>t.name===val);if(!t)return;_applyTemplateToProd(t);});
 
-  // Pieces listener
   const piecesEl=document.getElementById('fp-pieces');const pClone=piecesEl.cloneNode(true);piecesEl.parentNode.replaceChild(pClone,piecesEl);
   document.getElementById('fp-pieces').addEventListener('input',e=>{
     const n=Math.max(1,parseInt(e.target.value)||1);
@@ -1072,11 +1256,9 @@ function openProductionModal(preWid=null){
     _updateWageGrandTotal();
   });
 
-  // Main wage listener
   const mwEl=document.getElementById('fp-main-wage-per');const mwCl=mwEl.cloneNode(true);mwEl.parentNode.replaceChild(mwCl,mwEl);
   document.getElementById('fp-main-wage-per').addEventListener('input',()=>{_calcMainWage();_updateWageGrandTotal();});
 
-  // Add sub-worker button
   const addSwBtn=document.getElementById('fp-add-sub-worker');
   const asCl=addSwBtn.cloneNode(true);addSwBtn.parentNode.replaceChild(asCl,addSwBtn);
   document.getElementById('fp-add-sub-worker').addEventListener('click',()=>_addSubWorkerRow());
@@ -1115,7 +1297,6 @@ function _addSubWorkerRow(widVal='',nameVal='',wagePerVal='',wageTotalVal=''){
   `;
   wrap.appendChild(div);
 
-  // Wire worker search combo (exclude main worker)
   const workerNames=DB.all('workers').filter(w=>w.id!==document.getElementById('fp-worker-id').value).map(w=>w.name);
   buildCombo(`sw-name-${i}`,`sw-drop-${i}`,workerNames,val=>{
     const w=DB.all('workers').find(w=>w.name===val);
@@ -1255,7 +1436,6 @@ function saveProduction(){
     if(overuse.length){toast(`Not enough for ${pieces} pc(s): `+overuse.map(([m])=>m).join(', '),'danger');return;}
   }
 
-  // Collect valid sub-workers from DOM
   const activeSubWorkers=_prodSubWorkerRows.filter((r,i)=>{
     if(r.deleted)return false;
     const nameEl=document.getElementById(`sw-name-${i}`);
@@ -1276,18 +1456,16 @@ function saveProduction(){
   const matCostSnapshot={};DB.all('materials').forEach(m=>{matCostSnapshot[m.name]=parseFloat(m.unitCost||0);});
   const matCostPerPiece=used.reduce((s,u)=>s+parseFloat(u.qty||0)*parseFloat(matCostSnapshot[u.mat]||0),0);
 
-  // Deduct materials from main worker's holdings
   if(worker){
     const holdings=[...(worker.holdings||[])];
     used.forEach(u=>{const h=holdings.find(h=>h.mat===u.mat);if(h)h.qty=Math.max(0,parseFloat(h.qty)-parseFloat(u.qty)*pieces);});
     DB.update('workers',worker.id,{
       holdings:holdings.filter(h=>parseFloat(h.qty)>0),
       totalJobs:(worker.totalJobs||0)+pieces,
-      totalEarned:(worker.totalEarned||0)+mainWageTotal   // only main wage credited to main worker
+      totalEarned:(worker.totalEarned||0)+mainWageTotal
     });
   }
 
-  // Credit each sub-worker their wage and increment job count
   activeSubWorkers.forEach(sw=>{
     if(!sw.workerId)return;
     const sw_worker=DB.find('workers',sw.workerId);if(!sw_worker)return;
@@ -1307,13 +1485,10 @@ function saveProduction(){
     serialNumbers:serials,
     date,
     piecesCount:pieces,
-    // Main worker wage
     wagePerPiece:mainWagePer,
     mainWage:mainWageTotal,
-    // Sub-workers
     subWorkers:activeSubWorkers.map(sw=>({workerId:sw.workerId||null,workerName:sw.workerName,wagePerPiece:sw.wagePerPiece,totalWage:sw.totalWage})),
     subWageTotal,
-    // Grand total wages (main + all subs)
     totalWage:totalWageAll,
     materialsUsed:used,
     matCostPerPiece,
@@ -1369,7 +1544,6 @@ function deleteProduction(prodId){
     });
   }
 
-  // Reverse sub-worker earnings
   (prod.subWorkers||[]).forEach(sw=>{
     if(!sw.workerId)return;
     const sw_w=DB.find('workers',sw.workerId);if(!sw_w)return;
@@ -1422,7 +1596,6 @@ function renderProductions(){
         const grandCostPc=matCost+ohCost+(grandTotalWages/pieces);
         const ohTitle=(p.overheadsSnapshot||[]).map(o=>`${o.label}: ${fmtMoney(o.amount)}`).join('\n');
 
-        // Wage breakdown chips
         const wageChips=`
           <div class="wage-breakdown">
             <span class="wb-chip">👷 ${p.workerName}: ${fmtMoney(mainWage)}</span>
@@ -1446,8 +1619,6 @@ function renderProductions(){
               </div>
             </div>
             <div class="prod-serials">${serials.map(s=>`<span class="prod-sn-tag">📟 ${s}</span>`).join('')}</div>
-
-            <!-- Wage Breakdown -->
             <div class="prod-card-costs" style="flex-direction:column;gap:0.4rem">
               <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-light)">Wage Breakdown</div>
               ${wageChips}
@@ -1460,7 +1631,6 @@ function renderProductions(){
                 <div class="pcc-item pcc-total-wages"><span class="pcc-label">All wages</span><span class="pcc-value pcc-amber">${fmtMoney(grandTotalWages)}</span></div>
               </div>
             </div>
-
             ${(p.materialsUsed||[]).length?`<div class="prod-mats-used"><span class="pmu-label">Materials used (per pc):</span>${p.materialsUsed.map(m=>`<span class="pmu-tag">${fmtNum(m.qty)} ${m.unit} ${m.mat}</span>`).join('')}</div>`:''}
             ${p.notes?`<div class="prod-notes">💬 ${p.notes}</div>`:''}
           </div>
@@ -1830,12 +2000,9 @@ function createModals(){
     </div>
   </div>
 
-  <!-- ═══════════ PRODUCTION MODAL — Multi-Level Wages ═══════════ -->
   <div class="modal-backdrop" id="modal-production">
     <div class="modal modal-lg"><div class="modal-hdr"><div><h3 class="modal-title">Record Production</h3><p class="modal-sub">Materials deducted from worker holdings</p></div><button class="modal-close" onclick="closeModal('modal-production')">×</button></div>
     <div class="modal-body">
-
-      <!-- Product Details -->
       <div class="approve-section">
         <p class="section-label">Product Details</p>
         <div class="form-row three">
@@ -1846,16 +2013,12 @@ function createModals(){
         <div class="form-row"><div class="field-group"><label>Product Name *</label><input class="finput" id="fp-product" type="text" placeholder="e.g. Teak Chair…"/></div><div class="field-group"><label>No. of Pieces *</label><input class="finput" id="fp-pieces" type="number" min="1" step="1" value="1"/></div></div>
         <div style="margin-top:0.4rem"><div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--amber-dark);margin-bottom:0.5rem">Serial Numbers</div><div id="fp-serial-rows"></div></div>
       </div>
-
-      <!-- Wage Section — Multi Level -->
       <div class="approve-section" style="padding:0;overflow:hidden;border-radius:10px;border:1px solid var(--border)">
-        <!-- Header bar -->
         <div class="wage-section-hdr">
           <span class="wage-section-title">💳 Wages — All Workers</span>
           <span class="wage-section-total" id="fp-wage-grand-total" style="color:rgba(255,255,255,0.3)">₹0.00</span>
         </div>
         <div style="padding:0.75rem 0.85rem;display:flex;flex-direction:column;gap:0.6rem">
-          <!-- Main worker wage -->
           <div>
             <div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--amber-dark);margin-bottom:0.35rem">Main Worker</div>
             <div class="main-wage-row">
@@ -1864,24 +2027,16 @@ function createModals(){
               <input class="finput" id="fp-main-wage-total" type="number" min="0" step="1" placeholder="Total ₹" style="font-weight:700;background:var(--bg-secondary)" readonly/>
             </div>
           </div>
-
-          <!-- Sub-workers divider -->
           <div class="sub-worker-divider">Sub-Workers</div>
-
-          <!-- Sub-worker column headers -->
           <div style="display:grid;grid-template-columns:1fr 110px 90px 28px;gap:0.4rem;font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-light);padding:0 0.1rem">
             <span>Worker Name</span><span>₹ / Piece</span><span>Total ₹</span><span></span>
           </div>
-
-          <!-- Sub-worker rows container -->
           <div id="fp-sub-workers-wrap">
             <div style="font-size:0.78rem;color:var(--text-light);text-align:center;padding:0.5rem;border:1px dashed var(--border);border-radius:8px">No sub-workers added</div>
           </div>
           <button class="add-row-btn" id="fp-add-sub-worker" style="margin:0">+ Add Sub-Worker</button>
         </div>
       </div>
-
-      <!-- Materials -->
       <div class="approve-section"><p class="section-label">Materials Used <span style="font-weight:400;font-size:0.7rem;color:var(--text-tertiary)">(per piece)</span></p>
         <p class="section-hint" id="fp-holdings-hint">Select a worker first.</p>
         <div id="fp-holdings-list"></div>
@@ -1890,7 +2045,6 @@ function createModals(){
         <div id="fp-mat-cost" style="margin-top:0.6rem"></div>
         <div id="fp-overhead-preview"></div>
       </div>
-
       <div class="form-row"><div class="field-group fg-full"><label>Notes</label><input class="finput" id="fp-notes" type="text" placeholder="Optional…"/></div></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('modal-production')">Cancel</button><button class="btn btn-success" id="fp-save">✅ Record Production</button></div>
@@ -1925,6 +2079,19 @@ function createModals(){
       <button class="add-row-btn" id="ei-add-row">+ Add Row</button>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('modal-edit-issuance')">Cancel</button><button class="btn btn-primary" id="ei-save">💾 Save &amp; Balance</button></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modal-wage-payment">
+    <div class="modal"><div class="modal-hdr"><div><h3 class="modal-title">💳 Record Wage Payment</h3><p class="modal-sub">Worker: <strong id="wp-modal-worker"></strong> · <span id="wp-modal-month"></span></p></div><button class="modal-close" onclick="closeModal('modal-wage-payment')">×</button></div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="field-group"><label>Amount (₹) *</label><input class="finput" id="wp-modal-amount" type="number" min="1" step="1" placeholder="0"/></div>
+        <div class="field-group"><label>Date *</label><input class="finput" id="wp-modal-date" type="date"/></div>
+      </div>
+      <div class="form-row"><div class="field-group fg-full"><label>Notes (optional)</label><input class="finput" id="wp-modal-notes" type="text" placeholder="e.g. Cash, UPI, advance payment…"/></div></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('modal-wage-payment')">Cancel</button><button class="btn btn-success" onclick="saveWagePayment()">✅ Record Payment</button></div>
     </div>
   </div>
 
@@ -1987,20 +2154,6 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('sales-search')?.addEventListener('input',renderSales);
   document.getElementById('import-file-input')?.addEventListener('change',e=>importDataJSON(e.target.files[0]));
 
-  // Wire main worker label update when worker is selected
-  const origBuildComboWorker = ()=>{};
-  const workerLabelUpdate = (val) => {
-    const lbl = document.getElementById('fp-main-worker-label');
-    if(lbl) lbl.textContent = val || 'Select worker above';
-    if(lbl) lbl.style.fontStyle = val ? 'normal' : 'italic';
-    if(lbl) lbl.style.color = val ? 'var(--amber-dark)' : 'var(--text-tertiary)';
-  };
-  // Patch buildCombo for fp-worker-search to also update label
-  const _origNav = nav;
-
-  updateDate();setInterval(updateDate,60000);updateCounts();nav('dashboard');
-
-  // After DOMContentLoaded, patch fp-worker-search to update label
   document.addEventListener('input', e => {
     if(e.target && e.target.id === 'fp-worker-search') {
       const lbl = document.getElementById('fp-main-worker-label');
@@ -2008,4 +2161,6 @@ document.addEventListener('DOMContentLoaded',()=>{
       if(lbl){ lbl.textContent = val||'Select worker above'; lbl.style.fontStyle=val?'normal':'italic'; lbl.style.color=val?'var(--amber-dark)':'var(--text-tertiary)'; }
     }
   });
+
+  updateDate();setInterval(updateDate,60000);updateCounts();nav('dashboard');
 });
