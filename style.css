@@ -70,7 +70,9 @@ html, body {
 ::-webkit-scrollbar-thumb { background:var(--bg-tertiary); border-radius:3px; }
 ::-webkit-scrollbar-thumb:hover { background:var(--amber-light); }
 
-/* ── SIDEBAR ──────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   SIDEBAR
+   ════════════════════════════════════════════════ */
 .sidebar {
   position:fixed; top:0; left:0; bottom:0; width:var(--sidebar-w);
   background:var(--sidebar-bg);
@@ -165,7 +167,9 @@ html, body {
 }
 .foot-divider { width:1px; height:24px; background:var(--sidebar-bdr); }
 
-/* ── TOPBAR ───────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   TOPBAR
+   ════════════════════════════════════════════════ */
 .topbar {
   position:fixed; top:0; left:var(--sidebar-w); right:0; height:var(--topbar-h);
   background:var(--bg-card); border-bottom:1px solid var(--border);
@@ -205,7 +209,9 @@ html, body {
 .top-action-btn:hover  { background:var(--amber-dark); }
 .top-action-btn:active { transform:scale(0.97); }
 
-/* ── MAIN / PAGES ─────────────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   MAIN LAYOUT / PAGES
+   ════════════════════════════════════════════════ */
 .main {
   margin-left:var(--sidebar-w);
   margin-top:var(--topbar-h);
@@ -218,10 +224,13 @@ html, body {
 .page-inner { padding:1.8rem 2rem 4rem; max-width:1400px; }
 @media (max-width:600px) { .page-inner { padding:1.2rem 1rem 4rem; } }
 
-/* ── CARDS ────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   CARDS
+   ════════════════════════════════════════════════ */
 .card {
   background:var(--bg-card); border-radius:12px;
   border:1px solid var(--border); box-shadow:var(--shadow-xs); overflow:hidden;
+  margin-bottom:1.2rem;
 }
 .card-hdr {
   display:flex; align-items:center; justify-content:space-between;
@@ -237,7 +246,9 @@ html, body {
 .card-link:hover { text-decoration:underline; }
 .card-body { padding:1rem 1.1rem; }
 
-/* ── STAT GRID ────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   STAT GRID
+   ════════════════════════════════════════════════ */
 .stat-grid {
   display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
   gap:1rem; margin-bottom:1.4rem;
@@ -255,14 +266,18 @@ html, body {
 .sc-val  { font-size:1.6rem; font-weight:700; color:var(--text-primary); line-height:1.1; }
 .sc-sub  { font-size:0.7rem; color:var(--text-light); }
 
-/* ── TWO COL ──────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   TWO COLUMN LAYOUT
+   ════════════════════════════════════════════════ */
 .two-col {
   display:grid; grid-template-columns:1fr 1fr;
   gap:1.2rem; margin-bottom:1.2rem;
 }
 @media (max-width:900px) { .two-col { grid-template-columns:1fr; } }
 
-/* ── TOOLBAR ──────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   TOOLBAR / SEARCH / PILLS
+   ════════════════════════════════════════════════ */
 .toolbar {
   display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;
   margin-bottom:1.1rem;
@@ -295,7 +310,9 @@ html, body {
   box-shadow:0 2px 6px rgba(217,119,6,0.3);
 }
 
-/* ── TABLE CARD ───────────────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   TABLE CARD
+   ════════════════════════════════════════════════ */
 .table-card {
   background:var(--bg-card); border-radius:12px; border:1px solid var(--border);
   overflow:hidden; box-shadow:var(--shadow-xs);
@@ -322,7 +339,9 @@ html, body {
   font-size:0.73rem; color:var(--text-tertiary); font-family:var(--font-mono);
 }
 
-/* ── BADGES ───────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   BADGES
+   ════════════════════════════════════════════════ */
 .badge {
   display:inline-flex; align-items:center; gap:0.2rem;
   padding:0.2rem 0.55rem; border-radius:99px;
@@ -336,7 +355,9 @@ html, body {
 .badge-gray    { background:var(--bg-secondary);  color:var(--text-tertiary); }
 .badge-info    { background:var(--info-light);    color:var(--info); }
 
-/* ── BUTTONS ──────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   BUTTONS
+   ════════════════════════════════════════════════ */
 .btn {
   display:inline-flex; align-items:center; gap:0.4rem;
   padding:0.5rem 1rem; border-radius:8px; font-family:var(--font-body);
@@ -368,7 +389,9 @@ html, body {
 }
 .acts { display:flex; gap:0.35rem; align-items:center; }
 
-/* ── WO / PRODUCTION CARDS ────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   WO / SUPPLIER / SALES CARDS
+   ════════════════════════════════════════════════ */
 .wo-card {
   background:var(--bg-card); border:1px solid var(--border); border-radius:12px;
   margin-bottom:0.8rem; overflow:hidden; box-shadow:var(--shadow-xs);
@@ -399,7 +422,9 @@ html, body {
   border-top:1px solid var(--border-light); display:flex; justify-content:flex-end;
 }
 
-/* ── FINISHED GOODS CARDS ─────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   FINISHED GOODS CARDS
+   ════════════════════════════════════════════════ */
 .fg-card {
   display:flex; align-items:flex-start; gap:1rem;
   background:var(--bg-card); border:1px solid var(--border); border-radius:12px;
@@ -418,7 +443,9 @@ html, body {
 }
 .fg-wage { font-size:0.75rem; color:var(--text-tertiary); }
 
-/* ── FORMS & MODALS ───────────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   FORMS & MODALS
+   ════════════════════════════════════════════════ */
 .modal-backdrop {
   position:fixed; inset:0; background:rgba(0,0,0,0.55);
   backdrop-filter:blur(4px); z-index:500;
@@ -485,6 +512,9 @@ label {
 }
 .finput[readonly] { background:var(--bg-secondary); color:var(--text-tertiary); }
 
+/* ════════════════════════════════════════════════
+   COMBO / AUTOCOMPLETE DROPDOWNS
+   ════════════════════════════════════════════════ */
 .combo-wrap { position:relative; }
 .combo-drop {
   position:absolute; top:calc(100% + 3px); left:0; right:0; z-index:100;
@@ -497,6 +527,9 @@ label {
 }
 .combo-item:hover { background:var(--amber-pale); color:var(--amber-dark); }
 
+/* ════════════════════════════════════════════════
+   SECTION / APPROVAL BLOCKS
+   ════════════════════════════════════════════════ */
 .approve-section {
   margin-bottom:1rem; padding-bottom:1rem;
   border-bottom:1px solid var(--border-light);
@@ -509,7 +542,9 @@ label {
 .section-hint { font-size:0.75rem; color:var(--text-tertiary); margin-bottom:0.6rem; }
 .divider { border:none; border-top:1px solid var(--border-light); margin:0.8rem 0; }
 
-/* ── SUPPLIER BILL ROWS ───────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   SUPPLIER BILL ROWS
+   ════════════════════════════════════════════════ */
 .bill-table-hdr {
   display:grid; grid-template-columns:1fr 90px 70px 110px 28px;
   gap:0.4rem; padding:0.4rem 0;
@@ -533,6 +568,7 @@ label {
   padding:0.5rem 0.75rem; width:100%; text-align:center;
   font-size:0.78rem; color:var(--text-tertiary); cursor:pointer;
   transition:all 0.15s; margin-bottom:0.6rem;
+  font-family:var(--font-body);
 }
 .add-row-btn:hover {
   border-color:var(--amber); color:var(--amber); background:var(--amber-pale);
@@ -547,7 +583,9 @@ label {
   background:var(--danger-light); border-color:var(--danger); color:var(--danger);
 }
 
-/* ── NEW MATERIAL INLINE FORM (Supplier Bill) ─────────────── */
+/* ════════════════════════════════════════════════
+   NEW MATERIAL INLINE FORM (Supplier Bill)
+   ════════════════════════════════════════════════ */
 .new-mat-form {
   margin-top:0.4rem;
   border:1.5px solid #6ee7b7;
@@ -597,7 +635,9 @@ label {
   font-size:0.69rem; color:#6b7280; font-style:italic;
 }
 
-/* ── MATERIAL ROWS ────────────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   MATERIAL ROWS
+   ════════════════════════════════════════════════ */
 .mat-recipe-hdr {
   display:grid; grid-template-columns:1fr 100px 90px 28px;
   gap:0.4rem; padding:0.3rem 0;
@@ -617,7 +657,9 @@ label {
 .imr-name { font-weight:600; color:var(--text-primary); }
 .imr-qty  { font-family:var(--font-mono); font-size:0.76rem; color:var(--text-tertiary); }
 
-/* ── BANNERS ──────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   BANNERS
+   ════════════════════════════════════════════════ */
 .banner {
   display:flex; align-items:flex-start; gap:0.6rem;
   padding:0.75rem 1rem; border-radius:10px; font-size:0.82rem; margin-bottom:0.8rem;
@@ -628,7 +670,9 @@ label {
 .banner-success { background:var(--success-light); border-left:3px solid var(--success); }
 .banner-ico { font-size:1rem; flex-shrink:0; margin-top:0.05rem; }
 
-/* ── TOAST ────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   TOAST NOTIFICATIONS
+   ════════════════════════════════════════════════ */
 .toast-wrap {
   position:fixed; bottom:1.5rem; right:1.5rem; z-index:900;
   display:flex; flex-direction:column; gap:0.5rem;
@@ -645,7 +689,9 @@ label {
 .t-warning { border-left:3px solid var(--amber); }
 .t-danger  { border-left:3px solid #f87171; background:#1f1f1f; }
 
-/* ── DASHBOARD ────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   DASHBOARD ROWS
+   ════════════════════════════════════════════════ */
 .dash-row {
   display:flex; align-items:center; justify-content:space-between;
   padding:0.5rem 0; border-bottom:1px solid var(--border-light); font-size:0.82rem;
@@ -657,21 +703,27 @@ label {
   padding:1rem 0; text-align:center; color:var(--text-light); font-size:0.8rem;
 }
 
-/* ── EMPTY STATES ─────────────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   EMPTY STATES
+   ════════════════════════════════════════════════ */
 .t-empty {
   display:flex; flex-direction:column; align-items:center; gap:0.5rem;
   padding:3rem 1rem; color:var(--text-light); font-size:0.82rem;
 }
 .t-empty-ico { font-size:2rem; }
 
-/* ── OVERLAY ──────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   PAGE OVERLAY (mobile nav)
+   ════════════════════════════════════════════════ */
 .page-overlay {
   display:none; position:fixed; inset:0;
   background:rgba(0,0,0,0.5); z-index:250;
 }
 .page-overlay.show { display:block; }
 
-/* ── PRODUCT TEMPLATE CARDS ───────────────────────────────── */
+/* ════════════════════════════════════════════════
+   PRODUCT TEMPLATE CARDS
+   ════════════════════════════════════════════════ */
 .template-grid {
   display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:1rem;
 }
@@ -690,12 +742,18 @@ label {
 .template-name { font-weight:700; font-size:0.9rem; color:var(--text-primary); }
 .template-body { padding:0.8rem 1rem; }
 
-/* ── COST ROW ─────────────────────────────────────────────── */
-.cost-row { display:flex; align-items:center; gap:0.5rem; margin-bottom:0.4rem; }
+/* ════════════════════════════════════════════════
+   SUPPLIER BILL — empty hint
+   ════════════════════════════════════════════════ */
+.sup-empty-hint {
+  text-align:center; padding:0.7rem;
+  border:1px dashed var(--border); border-radius:8px;
+  font-size:0.78rem; color:var(--text-light); margin-bottom:0.5rem;
+}
 
-/* ══════════════════════════════════════════════════════════
+/* ════════════════════════════════════════════════
    PRODUCTION LOG — Summary Bar
-   ══════════════════════════════════════════════════════════ */
+   ════════════════════════════════════════════════ */
 .prod-summary-bar {
   display:flex; align-items:stretch;
   background:var(--sidebar-bg); border-radius:12px;
@@ -728,9 +786,9 @@ label {
 
 .prod-cards { display:flex; flex-direction:column; gap:0.8rem; }
 
-/* ══════════════════════════════════════════════════════════
+/* ════════════════════════════════════════════════
    PRODUCTION LOG — Card Layout
-   ══════════════════════════════════════════════════════════ */
+   ════════════════════════════════════════════════ */
 .prod-card {
   display:flex; gap:0; background:var(--bg-card);
   border:1px solid var(--border); border-radius:14px;
@@ -786,7 +844,7 @@ label {
   border:1px solid var(--border);
 }
 
-/* ── Prod Card Costs ──────────────────────────────────────── */
+/* Prod Card Costs */
 .prod-card-costs {
   display:flex; flex-wrap:wrap; gap:0.5rem 1.2rem;
   padding:0.65rem 0.85rem;
@@ -840,9 +898,9 @@ label {
 .prod-empty-title { font-weight:700; font-size:1rem; color:var(--text-primary); }
 .prod-empty-sub   { font-size:0.8rem; color:var(--text-light); }
 
-/* ══════════════════════════════════════════════════════════
-   PRODUCTION MODAL — Wage Section UI
-   ══════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════
+   PRODUCTION MODAL — Wage Section
+   ════════════════════════════════════════════════ */
 .wage-section-hdr {
   display:flex; align-items:center; justify-content:space-between;
   padding:0.7rem 0.85rem;
@@ -880,13 +938,12 @@ label {
   gap:0.4rem; align-items:center;
 }
 
-/* ══════════════════════════════════════════════════════════
-   PRODUCTION LOG — Wage Breakdown Chips
-   ══════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════
+   WAGE BREAKDOWN CHIPS
+   ════════════════════════════════════════════════ */
 .wage-breakdown {
   display:flex; flex-wrap:wrap; gap:0.35rem; align-items:center;
 }
-
 .wb-chip {
   display:inline-flex; align-items:center; gap:0.3rem;
   padding:0.22rem 0.65rem; border-radius:99px;
@@ -894,12 +951,10 @@ label {
   background:var(--amber-pale); color:var(--amber-dark);
   border:1px solid var(--amber-light);
 }
-
 .wb-chip-sub {
   background:var(--info-light); color:var(--info);
   border-color:#bfdbfe;
 }
-
 .wb-chip-total {
   background:var(--sidebar-bg); color:#fff;
   border-color:rgba(255,255,255,0.12);
@@ -907,25 +962,9 @@ label {
   letter-spacing:0.3px;
 }
 
-/* ── Sales — SN Results Panel ─────────────────────────────── */
-.sn-results-panel {
-  margin-top:0.5rem; border:1px solid var(--border); border-radius:10px;
-  background:var(--bg-card); box-shadow:var(--shadow-sm); max-height:280px; overflow-y:auto;
-}
-.sn-group { border-bottom:1px solid var(--border-light); padding:0.5rem 0; }
-.sn-group:last-child { border-bottom:none; }
-.sn-group-label {
-  font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.7px;
-  color:var(--amber-dark); padding:0.3rem 0.85rem 0.4rem;
-}
-.sn-item {
-  display:flex; align-items:center; justify-content:space-between;
-  padding:0.45rem 0.85rem; cursor:pointer; transition:background 0.12s; gap:0.75rem;
-}
-.sn-item:hover { background:var(--amber-pale); }
-.sn-item-info { display:flex; flex-direction:column; gap:0.15rem; min-width:0; }
-.sn-badge { font-family:var(--font-mono); font-size:0.78rem; font-weight:600; color:var(--text-primary); }
-
+/* ════════════════════════════════════════════════
+   SALES — SN Add Button
+   ════════════════════════════════════════════════ */
 .sn-add-btn {
   display:inline-flex; align-items:center; justify-content:center;
   background:var(--amber); color:#fff; border:none; border-radius:6px;
@@ -937,17 +976,37 @@ label {
 .sn-add-btn:hover  { background:var(--amber-dark); }
 .sn-add-btn:active { transform:scale(0.92); }
 
-/* ══════════════════════════════════════════════════════════
-   WORKER PROFILE — HOLDINGS EDIT FORM
-   ══════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════
+   WORKER PROFILE — Tabs
+   ════════════════════════════════════════════════ */
+.wp-tab-bar {
+  display:flex; gap:0; border-bottom:2px solid var(--border);
+  margin-bottom:1.2rem;
+}
+.wp-tab {
+  background:none; border:none; cursor:pointer;
+  padding:0.6rem 1.1rem; font-family:var(--font-body); font-size:0.82rem;
+  font-weight:600; color:var(--text-tertiary);
+  border-bottom:2px solid transparent; margin-bottom:-2px;
+  transition:color 0.15s, border-color 0.15s;
+}
+.wp-tab:hover { color:var(--amber-dark); }
+.wp-tab.active { color:var(--amber-dark); border-bottom-color:var(--amber); }
+
+.wp-pane { display:none; }
+.wp-pane.active { display:block; }
+
+/* ════════════════════════════════════════════════
+   WORKER PROFILE — Holdings Edit
+   ════════════════════════════════════════════════ */
 .he-row {
   display:grid; grid-template-columns:1fr 90px 80px 28px;
   gap:0.4rem; align-items:center; margin-bottom:0.4rem;
 }
 
-/* ══════════════════════════════════════════════════════════
-   WORKER PROFILE — MATERIAL ISSUANCE TIMELINE v2
-   ══════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════
+   WORKER PROFILE — Issuance Timeline v2
+   ════════════════════════════════════════════════ */
 .tl2-summary-chips { display:flex; flex-wrap:wrap; gap:0.35rem; }
 .tl2-summary-chip {
   display:inline-flex; align-items:center; gap:0.4rem;
@@ -1053,9 +1112,9 @@ label {
   border:1px solid var(--amber-light);
 }
 
-/* ══════════════════════════════════════════════════════════
+/* ════════════════════════════════════════════════
    RETURN TO STOCK — Searchable Modal
-   ══════════════════════════════════════════════════════════ */
+   ════════════════════════════════════════════════ */
 .rs-row {
   display:flex; align-items:center; gap:0.75rem;
   padding:0.65rem 0.85rem;
@@ -1107,16 +1166,9 @@ label {
   background:var(--amber); color:#fff; border-color:var(--amber);
 }
 
-/* ══════════════════════════════════════════════════════════
-   SUPPLIER BILL — empty hint
-   ══════════════════════════════════════════════════════════ */
-.sup-empty-hint {
-  text-align:center; padding:0.7rem;
-  border:1px dashed var(--border); border-radius:8px;
-  font-size:0.78rem; color:var(--text-light); margin-bottom:0.5rem;
-}
-
-/* ── RESPONSIVE ───────────────────────────────────────────── */
+/* ════════════════════════════════════════════════
+   RESPONSIVE
+   ════════════════════════════════════════════════ */
 @media (max-width:900px) {
   .stat-grid { grid-template-columns:repeat(2, 1fr); }
   .bill-table-hdr span:nth-child(3),
