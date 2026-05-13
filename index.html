@@ -94,18 +94,42 @@
 <div class="toast-wrap" id="toast-wrap"></div>
 <div class="page-overlay" id="page-overlay"></div>
 
-<!-- DASHBOARD -->
+<!-- ══════════════════════ DASHBOARD ══════════════════════ -->
 <section class="page active" id="page-dashboard">
   <div class="page-inner">
     <div class="stat-grid" id="dash-stats"></div>
     <div id="dash-banners"></div>
     <div class="two-col">
-      <div class="card"><div class="card-hdr"><span class="card-title">📦 Recent Issuances</span><button class="card-link" onclick="openIssueModal()">+ Issue →</button></div><div class="card-body" id="dash-issuances"></div></div>
-      <div class="card"><div class="card-hdr"><span class="card-title">⚠ Stock Alerts</span><button class="card-link" onclick="nav('materials')">View all →</button></div><div class="card-body" id="dash-stock-alerts"></div></div>
+      <div class="card">
+        <div class="card-hdr">
+          <span class="card-title">📦 Recent Issuances</span>
+          <button class="card-link" onclick="openIssueModal()">+ Issue →</button>
+        </div>
+        <div class="card-body" id="dash-issuances"></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr">
+          <span class="card-title">⚠ Stock Alerts</span>
+          <button class="card-link" onclick="nav('materials')">View all →</button>
+        </div>
+        <div class="card-body" id="dash-stock-alerts"></div>
+      </div>
     </div>
     <div class="two-col">
-      <div class="card" style="border-color:#d1fae5"><div class="card-hdr" style="background:#f0fdf4"><span class="card-title" style="color:var(--success)">💰 Recent Sales</span><button class="card-link" onclick="nav('sales')">View all →</button></div><div class="card-body" id="dash-sales"></div></div>
-      <div class="card"><div class="card-hdr"><span class="card-title">👷 Top Workers</span><button class="card-link" onclick="nav('workers')">View all →</button></div><div class="card-body" id="dash-workers-top"></div></div>
+      <div class="card" style="border-color:#d1fae5">
+        <div class="card-hdr" style="background:#f0fdf4">
+          <span class="card-title" style="color:var(--success)">💰 Recent Sales</span>
+          <button class="card-link" onclick="nav('sales')">View all →</button>
+        </div>
+        <div class="card-body" id="dash-sales"></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr">
+          <span class="card-title">👷 Top Workers</span>
+          <button class="card-link" onclick="nav('workers')">View all →</button>
+        </div>
+        <div class="card-body" id="dash-workers-top"></div>
+      </div>
     </div>
     <div class="card" style="margin-top:0">
       <div class="card-hdr"><span class="card-title">⚡ Quick Actions</span></div>
@@ -119,11 +143,14 @@
   </div>
 </section>
 
-<!-- RAW MATERIALS -->
+<!-- ══════════════════════ RAW MATERIALS ══════════════════════ -->
 <section class="page" id="page-materials">
   <div class="page-inner">
     <div class="toolbar">
-      <div class="search-wrap"><span class="search-ico">⌕</span><input type="text" class="search-input" id="mat-search" placeholder="Search materials…"/></div>
+      <div class="search-wrap">
+        <span class="search-ico">⌕</span>
+        <input type="text" class="search-input" id="mat-search" placeholder="Search materials…"/>
+      </div>
       <div class="toolbar-pills" id="mat-pills">
         <button class="tpill active" data-val="all">All</button>
         <button class="tpill" data-val="ok">In Stock</button>
@@ -133,27 +160,49 @@
     </div>
     <div class="table-card">
       <table class="data-table">
-        <thead><tr><th>Material</th><th>Category</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th>Stock Value</th><th>Status</th><th></th></tr></thead>
+        <thead>
+          <tr>
+            <th>Material</th>
+            <th>Category</th>
+            <th>Qty</th>
+            <th>Unit</th>
+            <th>Unit Cost</th>
+            <th>Stock Value</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
         <tbody id="mat-tbody"></tbody>
       </table>
-      <div class="table-foot"><span id="mat-foot-l"></span><span id="mat-foot-r"></span></div>
+      <div class="table-foot">
+        <span id="mat-foot-l"></span>
+        <span id="mat-foot-r"></span>
+      </div>
     </div>
   </div>
 </section>
 
-<!-- SUPPLIER BILLS -->
+<!-- ══════════════════════ SUPPLIER BILLS ══════════════════════ -->
 <section class="page" id="page-suppliers">
   <div class="page-inner">
-    <div class="toolbar"><div class="search-wrap"><span class="search-ico">⌕</span><input type="text" class="search-input" id="sup-search" placeholder="Search bills…"/></div></div>
+    <div class="toolbar">
+      <div class="search-wrap">
+        <span class="search-ico">⌕</span>
+        <input type="text" class="search-input" id="sup-search" placeholder="Search bills…"/>
+      </div>
+    </div>
     <div id="sup-list"></div>
   </div>
 </section>
 
-<!-- WORKERS -->
+<!-- ══════════════════════ WORKERS ══════════════════════ -->
 <section class="page" id="page-workers">
   <div class="page-inner">
     <div class="toolbar">
-      <div class="search-wrap"><span class="search-ico">⌕</span><input type="text" class="search-input" id="worker-search" placeholder="Search workers…"/></div>
+      <div class="search-wrap">
+        <span class="search-ico">⌕</span>
+        <input type="text" class="search-input" id="worker-search" placeholder="Search workers…"/>
+      </div>
       <div class="toolbar-pills" id="worker-pills">
         <button class="tpill active" data-val="all">All</button>
         <button class="tpill" data-val="holding">Holding Materials</button>
@@ -162,75 +211,147 @@
     </div>
     <div class="table-card">
       <table class="data-table">
-        <thead><tr><th>Name</th><th>Phone</th><th>Skill</th><th>Jobs</th><th>Earnings</th><th>Holding</th><th></th></tr></thead>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Skill</th>
+            <th>Jobs</th>
+            <th>Earnings</th>
+            <th>Holding</th>
+            <th></th>
+          </tr>
+        </thead>
         <tbody id="worker-tbody"></tbody>
       </table>
-      <div class="table-foot"><span id="worker-foot"></span><span></span></div>
+      <div class="table-foot">
+        <span id="worker-foot"></span>
+        <span></span>
+      </div>
     </div>
   </div>
 </section>
 
-<!-- WORKER PROFILE -->
+<!-- ══════════════════════ WORKER PROFILE ══════════════════════ -->
 <section class="page" id="page-worker-profile">
-  <div class="page-inner"><div class="t-empty"><span class="t-empty-ico">👤</span>Select a worker to view their profile</div></div>
+  <div class="page-inner">
+    <div class="t-empty">
+      <span class="t-empty-ico">👤</span>
+      Select a worker to view their profile
+    </div>
+  </div>
 </section>
 
-<!-- PRODUCT TEMPLATES -->
+<!-- ══════════════════════ PRODUCT TEMPLATES ══════════════════════ -->
 <section class="page" id="page-templates">
   <div class="page-inner">
-    <div class="toolbar"><div class="search-wrap"><span class="search-ico">⌕</span><input type="text" class="search-input" id="tpl-search" placeholder="Search templates…"/></div></div>
+    <div class="toolbar">
+      <div class="search-wrap">
+        <span class="search-ico">⌕</span>
+        <input type="text" class="search-input" id="tpl-search" placeholder="Search templates…"/>
+      </div>
+    </div>
     <div id="tpl-grid"></div>
   </div>
 </section>
 
-<!-- PRODUCTION LOG -->
+<!-- ══════════════════════ PRODUCTION LOG ══════════════════════ -->
 <section class="page" id="page-productions">
   <div class="page-inner">
-    <div class="toolbar"><div class="search-wrap"><span class="search-ico">⌕</span><input type="text" class="search-input" id="prod-search" placeholder="Search production…"/></div></div>
+    <div class="toolbar">
+      <div class="search-wrap">
+        <span class="search-ico">⌕</span>
+        <input type="text" class="search-input" id="prod-search" placeholder="Search production…"/>
+      </div>
+    </div>
     <div id="prod-list"></div>
   </div>
 </section>
 
-<!-- FINISHED GOODS -->
+<!-- ══════════════════════ FINISHED GOODS ══════════════════════ -->
 <section class="page" id="page-finished">
   <div class="page-inner">
     <div class="stat-grid" id="fg-stats"></div>
-    <div class="toolbar" style="margin-top:0"><div class="search-wrap"><span class="search-ico">⌕</span><input type="text" class="search-input" id="fg-search" placeholder="Search goods…"/></div></div>
+    <div class="toolbar" style="margin-top:0">
+      <div class="search-wrap">
+        <span class="search-ico">⌕</span>
+        <input type="text" class="search-input" id="fg-search" placeholder="Search goods…"/>
+      </div>
+    </div>
     <div id="fg-list"></div>
   </div>
 </section>
 
-<!-- SALES -->
+<!-- ══════════════════════ SALES ══════════════════════ -->
 <section class="page" id="page-sales">
   <div class="page-inner">
     <div class="stat-grid" id="sales-stats"></div>
-    <div class="toolbar" style="margin-top:0"><div class="search-wrap"><span class="search-ico">⌕</span><input type="text" class="search-input" id="sales-search" placeholder="Search sales…"/></div></div>
+    <div class="toolbar" style="margin-top:0">
+      <div class="search-wrap">
+        <span class="search-ico">⌕</span>
+        <input type="text" class="search-input" id="sales-search" placeholder="Search sales…"/>
+      </div>
+    </div>
     <div id="sales-list"></div>
   </div>
 </section>
 
-<!-- REPORTS -->
+<!-- ══════════════════════ REPORTS ══════════════════════ -->
 <section class="page" id="page-reports">
   <div class="page-inner">
-    <div class="card" style="margin-bottom:1.2rem"><div class="card-hdr"><span class="card-title">Live Summary</span></div><div class="card-body" id="report-summary-body"></div></div>
+    <div class="card" style="margin-bottom:1.2rem">
+      <div class="card-hdr"><span class="card-title">📊 Live Summary</span></div>
+      <div class="card-body" id="report-summary-body"></div>
+    </div>
     <div class="card" style="margin-bottom:1.2rem">
       <div class="card-hdr"><span class="card-title">🌐 Access on Any Desktop</span></div>
       <div class="card-body">
         <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:1rem">Data is stored in this browser's localStorage. Export a backup and import it on any other device.</p>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0.8rem;margin-bottom:1rem">
-          <div class="stat-card" style="padding:0.8rem;text-align:left"><div style="font-weight:700;margin-bottom:0.3rem">📤 Export Backup</div><p style="font-size:0.75rem;color:var(--text-tertiary);margin-bottom:0.6rem">Download all data as .json</p><button class="btn btn-primary btn-sm" style="width:100%" onclick="exportDataJSON()">⬇ Download</button></div>
-          <div class="stat-card" style="padding:0.8rem;text-align:left"><div style="font-weight:700;margin-bottom:0.3rem">📥 Import Backup</div><p style="font-size:0.75rem;color:var(--text-tertiary);margin-bottom:0.6rem">Load a .json backup file</p><label class="btn btn-ghost btn-sm" style="width:100%;cursor:pointer;text-align:center">⬆ Import<input type="file" id="import-file-input" accept=".json" style="display:none"/></label></div>
-          <div class="stat-card" style="padding:0.8rem;text-align:left"><div style="font-weight:700;margin-bottom:0.3rem">☁ Host Online</div><ul style="font-size:0.74rem;color:var(--text-tertiary);padding-left:1rem;margin:0.3rem 0 0"><li>Netlify Drop — drag &amp; drop</li><li>GitHub Pages — free URL</li><li>VS Code Live Server</li></ul></div>
+          <div class="stat-card" style="padding:0.8rem;text-align:left">
+            <div style="font-weight:700;margin-bottom:0.3rem">📤 Export Backup</div>
+            <p style="font-size:0.75rem;color:var(--text-tertiary);margin-bottom:0.6rem">Download all data as .json</p>
+            <button class="btn btn-primary btn-sm" style="width:100%" onclick="exportDataJSON()">⬇ Download</button>
+          </div>
+          <div class="stat-card" style="padding:0.8rem;text-align:left">
+            <div style="font-weight:700;margin-bottom:0.3rem">📥 Import Backup</div>
+            <p style="font-size:0.75rem;color:var(--text-tertiary);margin-bottom:0.6rem">Load a .json backup file</p>
+            <label class="btn btn-ghost btn-sm" style="width:100%;cursor:pointer;text-align:center">
+              ⬆ Import
+              <input type="file" id="import-file-input" accept=".json" style="display:none"/>
+            </label>
+          </div>
+          <div class="stat-card" style="padding:0.8rem;text-align:left">
+            <div style="font-weight:700;margin-bottom:0.3rem">☁ Host Online</div>
+            <ul style="font-size:0.74rem;color:var(--text-tertiary);padding-left:1rem;margin:0.3rem 0 0">
+              <li>Netlify Drop — drag &amp; drop</li>
+              <li>GitHub Pages — free URL</li>
+              <li>VS Code Live Server</li>
+            </ul>
+          </div>
         </div>
-        <div style="background:var(--amber-pale);border-radius:8px;padding:0.75rem 1rem;font-size:0.76rem">💡 Export weekly. Load the .json on any browser to continue.</div>
+        <div style="background:var(--amber-pale);border-radius:8px;padding:0.75rem 1rem;font-size:0.76rem">
+          💡 Export weekly. Load the .json on any browser to continue.
+        </div>
       </div>
     </div>
-    <div class="card" style="border-color:var(--danger)"><div class="card-hdr" style="background:var(--danger-light)"><span class="card-title" style="color:var(--danger)">⚠ Danger Zone</span></div><div class="card-body"><p style="font-size:0.82rem;color:var(--text-tertiary);margin-bottom:1rem">Permanently erase all data.</p><button class="btn btn-danger" onclick="confirmDeleteAllData()">🗑 Delete All Data</button></div></div>
+    <div class="card" style="border-color:var(--danger)">
+      <div class="card-hdr" style="background:var(--danger-light)">
+        <span class="card-title" style="color:var(--danger)">⚠ Danger Zone</span>
+      </div>
+      <div class="card-body">
+        <p style="font-size:0.82rem;color:var(--text-tertiary);margin-bottom:1rem">Permanently erase all data.</p>
+        <button class="btn btn-danger" onclick="confirmDeleteAllData()">🗑 Delete All Data</button>
+      </div>
+    </div>
   </div>
 </section>
 
 </main>
+
+<!-- ══════════════════════ MODALS CONTAINER ══════════════════════ -->
 <div id="modals-container"></div>
+
 <script src="script.js"></script>
 </body>
 </html>
