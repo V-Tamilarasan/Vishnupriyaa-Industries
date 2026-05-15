@@ -1,7 +1,6 @@
 const DB = (() => {
   const PFX  = 'vi3_';
-  const COLS = ['materials','bills','workers','templates','issuances','productions','finished','sales','wagePayments'];
-  const _c   = {};
+  const COLS = ['materials','bills','workers','templates','issuances','productions','finished','sales','wagePayments','polishJobs'];
   COLS.forEach(c => { try { _c[c] = JSON.parse(localStorage.getItem(PFX+c)||'[]'); } catch { _c[c]=[]; } });
   const save = c => { try { localStorage.setItem(PFX+c, JSON.stringify(_c[c])); } catch { setTimeout(()=>toast('Storage full!','danger'),100); } };
   const uid  = () => Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -101,6 +100,8 @@ const PAGE_CONFIG = {
   'worker-profile':{label:'Worker Profile',    btn:null},
   templates:       {label:'Product Templates', btn:{text:'+ New Template',      fn:()=>openTemplateModal(null)}},
   productions:     {label:'Production Log',    btn:{text:'+ Record Production', fn:openProductionModal}},
+  polish:          {label:'Polish Jobs',       btn:{text:'+ New Polish Job',    fn:()=>openPolishModal(null)}},
+  polish:          {label:'Polish Jobs',       btn:{text:'+ New Polish Job',    fn:()=>openPolishModal(null)}},
   finished:        {label:'Finished Goods',    btn:null},
   sales:           {label:'Sales Bills',       btn:{text:'+ New Sales Bill',    fn:()=>openSalesModal(null)}},
   reports:         {label:'Reports',           btn:null},
@@ -109,6 +110,7 @@ const RENDERERS = {
   dashboard:'renderDashboard', materials:'renderMaterials', suppliers:'renderSuppliers',
   workers:'renderWorkers', 'worker-profile':'renderWorkerProfile',
   templates:'renderTemplates', productions:'renderProductions',
+  polish:'renderPolish',
   finished:'renderFinished', sales:'renderSales', reports:'renderReports',
 };
 let _profileWid=null;
@@ -146,6 +148,7 @@ function updateCounts(){
   set('nc-workers',   workers.length);
   set('nc-templates', DB.all('templates').length);
   set('nc-productions',DB.all('productions').length);
+  set('nc-polish',    DB.all('polishJobs').filter(p=>p.status==='pending').length);
   set('nc-finished',  DB.all('finished').filter(f=>!f.sold).length);
   set('nc-sales',     DB.all('sales').length);
   set('sf-holding',   holding);
@@ -155,6 +158,7 @@ function updateCounts(){
 function renderDashboard(){
   const mats=DB.all('materials'), workers=DB.all('workers');
   const fin=DB.all('finished'), sales=DB.all('sales'), prods=DB.all('productions');
+  const polishPending=DB.all('polishJobs').filter(p=>p.status==='pending');
   const inStock=fin.filter(f=>!f.sold).length;
   const totalSales=sales.reduce((s,sl)=>s+parseFloat(sl.totalAmount||sl.amount||0),0);
   const totalWages=prods.reduce((s,p)=>s+parseFloat(p.totalWage||0),0);
@@ -164,6 +168,7 @@ function renderDashboard(){
   if(statsEl)statsEl.innerHTML=`
     <div class="stat-card"><span class="sc-ico">📦</span><div class="sc-lbl">Materials</div><div class="sc-val">${mats.length}</div><div class="sc-sub">${lowMats.length} low/out</div></div>
     <div class="stat-card"><span class="sc-ico">👷</span><div class="sc-lbl">Workers Holding</div><div class="sc-val">${holding.length}</div><div class="sc-sub">of ${workers.length} total</div></div>
+    <div class="stat-card" style="border-color:${polishPending.length?'var(--amber-light)':'var(--border)'}"><span class="sc-ico">🎨</span><div class="sc-lbl">Pending Polish</div><div class="sc-val" style="color:${polishPending.length?'var(--amber)':'var(--text-primary)'}">${polishPending.length}</div><div class="sc-sub">${DB.all('polishJobs').filter(p=>p.status==='done').length} done</div></div>
     <div class="stat-card"><span class="sc-ico">✅</span><div class="sc-lbl">In Stock</div><div class="sc-val" style="color:var(--info)">${inStock}</div><div class="sc-sub">${fin.length-inStock} sold</div></div>
     <div class="stat-card"><span class="sc-ico">💳</span><div class="sc-lbl">Wages Paid</div><div class="sc-val" style="font-size:1.2rem">${fmtMoney(totalWages)}</div></div>
     <div class="stat-card" style="border-color:var(--success-light)"><span class="sc-ico">💰</span><div class="sc-lbl">Revenue</div><div class="sc-val" style="font-size:1.2rem;color:var(--success)">${fmtMoney(totalSales)}</div></div>
@@ -171,6 +176,7 @@ function renderDashboard(){
   let banners='';
   if(lowMats.length) banners+=`<div class="banner banner-warning"><span class="banner-ico">⚠️</span><div><strong>${lowMats.filter(m=>stockStatus(m)==='out').length} out, ${lowMats.filter(m=>stockStatus(m)==='low').length} low:</strong> ${lowMats.slice(0,3).map(m=>m.name).join(', ')}${lowMats.length>3?` +${lowMats.length-3} more`:''}</div></div>`;
   if(holding.length) banners+=`<div class="banner banner-warning"><span class="banner-ico">📦</span><div><strong>${holding.length} worker(s) holding materials:</strong> ${holding.map(w=>`<button class="card-link" onclick="nav('worker-profile','${w.id}')">${w.name}</button>`).join(', ')}</div></div>`;
+  if(polishPending.length) banners+=`<div class="banner" style="background:var(--amber-pale);border-left:3px solid var(--amber)"><span class="banner-ico">🎨</span><div><strong>${polishPending.length} item(s) awaiting polish</strong> — assign workers to complete before sale.<button class="card-link" style="margin-left:0.5rem" onclick="nav('polish')">View →</button></div></div>`;
   const be=document.getElementById('dash-banners'); if(be)be.innerHTML=banners;
   const riEl=document.getElementById('dash-issuances');
   if(riEl){ const iss=DB.all('issuances').slice(0,5); riEl.innerHTML=iss.length?iss.map(i=>`<div class="dash-row"><span class="dr-name">👷 ${i.workerName}</span><span class="dr-val">${fmtDate(i.date)} · ${(i.materials||[]).length} items</span></div>`).join(''):'<div class="dash-empty">No issuances yet</div>'; }
@@ -566,7 +572,7 @@ function deleteWorker(id){
 }
 
 /* ═══════════════════════════════════════════════════════
-   WORKER PROFILE — Tabbed (Overview / Monthly Wages / Production History)
+   WORKER PROFILE
    ═══════════════════════════════════════════════════════ */
 function renderWorkerProfile(){
   const wid=_profileWid, pageEl=document.getElementById('page-worker-profile'); if(!pageEl)return;
@@ -576,6 +582,7 @@ function renderWorkerProfile(){
   const bc=document.getElementById('bc-page'); if(bc)bc.textContent=`Profile — ${worker.name}`;
   const holdings=worker.holdings||[];
   const prods=DB.where('productions',p=>p.workerId===wid||(p.subWorkers||[]).some(sw=>sw.workerId===wid));
+  const polishJobs=DB.where('polishJobs',p=>p.workerId===wid||(p.subWorkers||[]).some(sw=>sw.workerId===wid));
   const fin=DB.where('finished',f=>f.workerId===wid);
   const totalHoldingValue=holdings.reduce((s,h)=>{const m=DB.all('materials').find(m=>m.name===h.mat);return s+parseFloat(h.qty||0)*parseFloat(m?.unitCost||0);},0);
   const totalMatUsedValue=fin.reduce((s,f)=>s+parseFloat(f.matCostPerPiece||0),0);
@@ -589,7 +596,6 @@ function renderWorkerProfile(){
       <button class="btn btn-ghost btn-sm" style="background:var(--info-light);color:var(--info);border-color:#bfdbfe" onclick="openReturnStockModal('${wid}')">↩ Return to Stock</button>
     </div>
 
-    <!-- Worker Header Card -->
     <div class="card" style="margin-bottom:1.2rem">
       <div class="card-hdr" style="background:var(--amber-pale)">
         <div style="display:flex;align-items:center;gap:1rem">
@@ -605,14 +611,12 @@ function renderWorkerProfile(){
       </div>
     </div>
 
-    <!-- Tab Bar -->
     <div class="wp-tab-bar">
       <button class="wp-tab active" data-wptab="overview" onclick="wpSwitchTab('overview')">Overview</button>
       <button class="wp-tab" data-wptab="wages" onclick="wpSwitchTab('wages')">💳 Monthly Wages</button>
       <button class="wp-tab" data-wptab="history" onclick="wpSwitchTab('history')">📋 Production History</button>
     </div>
 
-    <!-- Overview Pane -->
     <div class="wp-pane active" id="wp-pane-overview">
       <div class="two-col">
         <div class="card" id="wp-holdings-card" style="border-color:${holdings.length?'var(--amber)':'var(--border)'}">
@@ -634,8 +638,10 @@ function renderWorkerProfile(){
                 <div style="font-weight:600">${f.product}</div>
                 <div style="font-size:0.7rem;font-family:var(--font-mono);color:var(--text-tertiary)">SN: ${f.serialNumber||'—'} · ${fmtDate(f.date)}</div>
                 <div style="font-size:0.72rem;color:var(--text-tertiary)">💳 ${fmtMoney(f.totalWage||0)} wage${f.matCostPerPiece?` · 📦 ${fmtMoney(f.matCostPerPiece)} mat.`:''}</div>
+                ${f.polishStatus==='pending'?`<span class="badge badge-amber" style="font-size:0.6rem">🎨 Awaiting Polish</span>`:''}
+                ${f.polishStatus==='done'?`<span class="badge badge-success" style="font-size:0.6rem">✨ Polished</span>`:''}
               </div>
-              ${f.sold?`<span class="badge badge-success" style="font-size:0.65rem;flex-shrink:0">Sold</span>`:`<button class="btn btn-primary btn-sm" onclick="openSalesModal('${f.id}')" style="flex-shrink:0">🧾 Sell</button>`}
+              ${f.sold?`<span class="badge badge-success" style="font-size:0.65rem;flex-shrink:0">Sold</span>`:f.polishStatus==='done'||!f.polishStatus?`<button class="btn btn-primary btn-sm" onclick="openSalesModal('${f.id}')" style="flex-shrink:0">🧾 Sell</button>`:`<button class="btn btn-ghost btn-sm" onclick="nav('polish')" style="flex-shrink:0;font-size:0.68rem">🎨 Polish first</button>`}
             </div>`).join(''):'<div class="dash-empty">No products yet</div>'}
           </div>
         </div>
@@ -643,12 +649,10 @@ function renderWorkerProfile(){
       ${_renderIssuanceTimeline(issuances, worker)}
     </div>
 
-    <!-- Monthly Wages Pane -->
     <div class="wp-pane" id="wp-pane-wages">
       ${_renderMonthlyWages(wid, worker, prods)}
     </div>
 
-    <!-- Production History Pane -->
     <div class="wp-pane" id="wp-pane-history">
       ${_renderProductionHistory(wid, prods)}
     </div>
@@ -660,7 +664,6 @@ function wpSwitchTab(tab){
   document.querySelectorAll('.wp-pane').forEach(p=>p.classList.toggle('active', p.id===`wp-pane-${tab}`));
 }
 
-/* ─── Monthly Wage Helpers ─── */
 function _getMonthKey(dateStr){
   if(!dateStr)return'';
   const d=new Date(dateStr+'T12:00:00');
@@ -673,7 +676,7 @@ function _monthLabel(key){
 }
 
 function _renderMonthlyWages(wid, worker, prods){
-  // Build earnings map from productions
+  const polishJobs=DB.where('polishJobs',p=>p.workerId===wid||(p.subWorkers||[]).some(sw=>sw.workerId===wid));
   const monthMap={};
   prods.forEach(p=>{
     const key=_getMonthKey(p.date); if(!key)return;
@@ -684,8 +687,16 @@ function _renderMonthlyWages(wid, worker, prods){
     monthMap[key].earned+=myWage;
     monthMap[key].pieces+=(p.piecesCount||1);
   });
+  // Add polish wages
+  polishJobs.forEach(p=>{
+    const key=_getMonthKey(p.date); if(!key)return;
+    if(!monthMap[key])monthMap[key]={earned:0,pieces:0};
+    const isMain=p.workerId===wid;
+    const subEntry=(p.subWorkers||[]).find(sw=>sw.workerId===wid);
+    const myWage=isMain?parseFloat(p.mainWage||p.totalWage||0):parseFloat(subEntry?.totalWage||0);
+    monthMap[key].earned+=myWage;
+  });
 
-  // Load payments for this worker
   const payments=DB.where('wagePayments',p=>p.workerId===wid);
   const payByMonth={};
   payments.forEach(p=>{
@@ -694,7 +705,6 @@ function _renderMonthlyWages(wid, worker, prods){
     payByMonth[key].push(p);
   });
 
-  // All months that have any data
   const allKeys=[...new Set([...Object.keys(monthMap),...payments.map(p=>p.monthKey||'general').filter(k=>k!=='general')])].sort().reverse();
 
   const totalEarned=Object.values(monthMap).reduce((s,m)=>s+m.earned,0);
@@ -705,12 +715,11 @@ function _renderMonthlyWages(wid, worker, prods){
 
   return `
   <div class="stat-grid" style="margin-bottom:1.2rem">
-    <div class="stat-card"><span class="sc-ico">💰</span><div class="sc-lbl">Total Earned</div><div class="sc-val" style="font-size:1.1rem">${fmtMoney(totalEarned)}</div><div class="sc-sub">from ${prods.length} batch(es)</div></div>
+    <div class="stat-card"><span class="sc-ico">💰</span><div class="sc-lbl">Total Earned</div><div class="sc-val" style="font-size:1.1rem">${fmtMoney(totalEarned)}</div><div class="sc-sub">prod + polish</div></div>
     <div class="stat-card" style="border-color:var(--success-light)"><span class="sc-ico">✅</span><div class="sc-lbl">Total Paid</div><div class="sc-val" style="font-size:1.1rem;color:var(--success)">${fmtMoney(totalPaid)}</div><div class="sc-sub">${payments.length} payment(s)</div></div>
     <div class="stat-card" style="border-color:${totalBalance>0?'var(--danger-light)':'var(--success-light)'}"><span class="sc-ico">${totalBalance>0?'⚠':'✓'}</span><div class="sc-lbl">Balance Due</div><div class="sc-val" style="font-size:1.1rem;color:${totalBalance>0?'var(--danger)':'var(--success)'}">${fmtMoney(Math.abs(totalBalance))}</div><div class="sc-sub" style="color:${totalBalance>0?'var(--danger)':'var(--success)'}">${totalBalance>0?'Unpaid':'Fully paid'}</div></div>
   </div>
 
-  <!-- Month-by-Month Table -->
   <div class="card" style="margin-bottom:1.2rem">
     <div class="card-hdr">
       <span class="card-title">📅 Month-by-Month Breakdown</span>
@@ -741,14 +750,12 @@ function _renderMonthlyWages(wid, worker, prods){
             ${earned>0&&bal>0?`<button class="act-btn" onclick="openWagePaymentModal('${wid}','${key}',${bal})">💸 Pay ${fmtMoney(bal)}</button>`:''}
             ${earned>0&&bal>0?`<button class="act-btn" style="font-size:0.72rem" onclick="openWagePaymentModal('${wid}','${key}',0)">Part pay</button>`:''}
             ${fullyPaid?`<span class="badge badge-success" style="font-size:0.65rem">Paid</span>`:''}
-            ${earned<=0&&paid<=0?`<span style="font-size:0.72rem;color:var(--text-light)">No work</span>`:''}
           </div>
         </div>`;
       }).join('') : `<div class="t-empty" style="padding:2rem 0"><span class="t-empty-ico">📭</span>No production data yet</div>`}
     </div>
   </div>
 
-  <!-- Payment Timeline -->
   <div class="card">
     <div class="card-hdr">
       <span class="card-title">💳 Payment Timeline</span>
@@ -758,7 +765,7 @@ function _renderMonthlyWages(wid, worker, prods){
       ${allPayments.length ? `
         <div style="position:relative;padding-left:2.5rem">
           <div style="position:absolute;left:1.25rem;top:0;bottom:0;width:2px;background:var(--border-light)"></div>
-          ${allPayments.map((p,idx)=>`
+          ${allPayments.map((p)=>`
             <div style="position:relative;padding:0.75rem 1rem 0.75rem 0.5rem;border-bottom:1px solid var(--border-light)">
               <div style="position:absolute;left:-0.55rem;top:1rem;width:10px;height:10px;border-radius:50%;background:var(--success);border:2px solid var(--bg-card)"></div>
               <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem">
@@ -775,39 +782,53 @@ function _renderMonthlyWages(wid, worker, prods){
         </div>
       ` : `<div class="t-empty" style="padding:2rem 0"><span class="t-empty-ico">💳</span>No payments recorded yet.<br><button class="btn btn-primary btn-sm" style="margin-top:0.75rem" onclick="openWagePaymentModal('${wid}','',0)">+ Record First Payment</button></div>`}
     </div>
-  </div>
-  <p style="font-size:0.72rem;color:var(--text-tertiary);margin-top:0.75rem;font-style:italic">* Wages include this worker's earnings as main worker and as sub-worker across all productions.</p>`;
+  </div>`;
 }
 
-/* ─── Production History (serial numbers, no total wages, no materials used) ─── */
 function _renderProductionHistory(wid, prods){
-  if(!prods.length)return`<div class="t-empty" style="padding:3rem 0"><span class="t-empty-ico">🏭</span>No production recorded yet</div>`;
+  const polishJobs=DB.where('polishJobs',p=>p.workerId===wid||(p.subWorkers||[]).some(sw=>sw.workerId===wid));
+  if(!prods.length&&!polishJobs.length)return`<div class="t-empty" style="padding:3rem 0"><span class="t-empty-ico">🏭</span>No production recorded yet</div>`;
+  const prodRows=prods.map(p=>{
+    const isMain=p.workerId===wid;
+    const subEntry=(p.subWorkers||[]).find(sw=>sw.workerId===wid);
+    const myWage=isMain?parseFloat(p.mainWage||p.totalWage||0):parseFloat(subEntry?.totalWage||0);
+    const serials=p.serialNumbers||[p.serialNumber||'—'];
+    return `<tr>
+      <td class="td-name">${p.product}</td>
+      <td><span class="badge badge-gray" style="font-size:0.65rem">🏭 Production</span></td>
+      <td>${isMain?`<span class="badge badge-amber" style="font-size:0.65rem">👷 Main</span>`:`<span class="badge badge-primary" style="font-size:0.65rem">🔧 Sub</span>`}</td>
+      <td style="font-size:0.74rem">${serials.map(s=>`<span style="display:inline-block;background:var(--bg-secondary);border:1px solid var(--border);border-radius:5px;padding:0.1rem 0.45rem;margin:0.1rem;font-family:var(--font-mono)">${s}</span>`).join(' ')}</td>
+      <td class="td-mono">${fmtDate(p.date)}</td>
+      <td class="td-mono" style="text-align:center">${p.piecesCount||1}</td>
+      <td class="td-mono" style="color:var(--amber-dark);font-weight:700">${fmtMoney(myWage)}</td>
+    </tr>`;
+  });
+  const polishRows=polishJobs.map(p=>{
+    const isMain=p.workerId===wid;
+    const subEntry=(p.subWorkers||[]).find(sw=>sw.workerId===wid);
+    const myWage=isMain?parseFloat(p.mainWage||p.totalWage||0):parseFloat(subEntry?.totalWage||0);
+    const serials=(p.items||[]).map(it=>it.serialNumber).filter(Boolean);
+    return `<tr>
+      <td class="td-name">${p.productName||'Polish Job'}</td>
+      <td><span class="badge badge-primary" style="font-size:0.65rem;background:var(--purple-light);color:var(--purple)">🎨 Polish</span></td>
+      <td>${isMain?`<span class="badge badge-amber" style="font-size:0.65rem">👷 Main</span>`:`<span class="badge badge-primary" style="font-size:0.65rem">🔧 Sub</span>`}</td>
+      <td style="font-size:0.74rem">${serials.length?serials.map(s=>`<span style="display:inline-block;background:var(--bg-secondary);border:1px solid var(--border);border-radius:5px;padding:0.1rem 0.45rem;margin:0.1rem;font-family:var(--font-mono)">${s}</span>`).join(' '):'—'}</td>
+      <td class="td-mono">${fmtDate(p.date)}</td>
+      <td class="td-mono" style="text-align:center">${(p.items||[]).length||1}</td>
+      <td class="td-mono" style="color:var(--purple);font-weight:700">${fmtMoney(myWage)}</td>
+    </tr>`;
+  });
   return `<div class="table-card">
     <table class="data-table">
-      <thead><tr><th>Product</th><th>Role</th><th>Serial No(s).</th><th>Date</th><th>Pieces</th><th>My Wage</th></tr></thead>
-      <tbody>${prods.map(p=>{
-        const isMain=p.workerId===wid;
-        const subEntry=(p.subWorkers||[]).find(sw=>sw.workerId===wid);
-        const myWage=isMain?parseFloat(p.mainWage||p.totalWage||0):parseFloat(subEntry?.totalWage||0);
-        const serials=p.serialNumbers||[p.serialNumber||'—'];
-        return `<tr>
-          <td class="td-name">${p.product}</td>
-          <td>${isMain?`<span class="badge badge-amber" style="font-size:0.65rem">👷 Main</span>`:`<span class="badge badge-primary" style="font-size:0.65rem">🔧 Sub</span>`}</td>
-          <td style="font-size:0.74rem">${serials.map(s=>`<span style="display:inline-block;background:var(--bg-secondary);border:1px solid var(--border);border-radius:5px;padding:0.1rem 0.45rem;margin:0.1rem;font-family:var(--font-mono)">${s}</span>`).join(' ')}</td>
-          <td class="td-mono">${fmtDate(p.date)}</td>
-          <td class="td-mono" style="text-align:center">${p.piecesCount||1}</td>
-          <td class="td-mono" style="color:var(--amber-dark);font-weight:700">${fmtMoney(myWage)}</td>
-        </tr>`;
-      }).join('')}</tbody>
+      <thead><tr><th>Product</th><th>Stage</th><th>Role</th><th>Serial No(s).</th><th>Date</th><th>Pieces</th><th>My Wage</th></tr></thead>
+      <tbody>${[...prodRows,...polishRows].join('')}</tbody>
     </table>
     <div class="table-foot">
-      <span>${prods.length} production batch(es)</span>
-      <span>Total my wages: ${fmtMoney(prods.reduce((s,p)=>{const isMain=p.workerId===wid;const sub=(p.subWorkers||[]).find(sw=>sw.workerId===wid);return s+(isMain?parseFloat(p.mainWage||p.totalWage||0):parseFloat(sub?.totalWage||0));},0))}</span>
+      <span>${prods.length} production + ${polishJobs.length} polish batch(es)</span>
     </div>
   </div>`;
 }
 
-/* ─── Wage Payment Modal ─── */
 let _wagePayWid=null, _wagePayMonthKey=null;
 function openWagePaymentModal(wid, monthKey, suggestedAmt){
   _wagePayWid=wid; _wagePayMonthKey=monthKey||null;
@@ -1219,7 +1240,7 @@ function renderTemplates(){
 function deleteTemplate(id){if(!confirm('Delete this template?'))return;DB.delete('templates',id);renderTemplates();updateCounts();toast('Deleted','warning');}
 
 /* ═══════════════════════════════════════════════════
-   PRODUCTION ENTRY — Multi-Level Wage System
+   PRODUCTION ENTRY
    ═══════════════════════════════════════════════════ */
 let _prodMatRows=[], _prodPreWid=null, _prodOverheadsSnapshot=[], _prodSubWorkerRows=[];
 let _prodSubWCount = 0;
@@ -1498,6 +1519,7 @@ function saveProduction(){
     notes:document.getElementById('fp-notes').value.trim()
   });
 
+  // Create finished goods with polishStatus = 'pending'
   serials.forEach(sn=>{
     DB.insert('finished',{
       productionId:prod.id,
@@ -1514,14 +1536,15 @@ function saveProduction(){
       matCostPerPiece,
       ohCostPerPiece,
       overheadsSnapshot,
-      sold:false
+      sold:false,
+      polishStatus:'pending'  // NEW: must be polished before sale
     });
   });
 
-  closeModal('modal-production');renderProductions();renderWorkers();renderFinished();updateCounts();
+  closeModal('modal-production');renderProductions();renderWorkers();renderFinished();renderPolish();updateCounts();
   if(document.getElementById('page-worker-profile')?.classList.contains('active'))renderWorkerProfile();
   const subNames=activeSubWorkers.map(sw=>sw.workerName).filter(Boolean).join(', ');
-  toast(`${pieces} × "${product}" recorded${subNames?' · Sub: '+subNames:''}`);
+  toast(`${pieces} × "${product}" recorded — awaiting polish 🎨${subNames?' · Sub: '+subNames:''}`);
 }
 
 /* ═══════════ DELETE PRODUCTION ═══════════ */
@@ -1554,8 +1577,12 @@ function deleteProduction(prodId){
   });
 
   serials.forEach(sn=>{const fg=DB.all('finished').find(f=>f.serialNumber===sn&&f.productionId===prodId);if(fg)DB.delete('finished',fg.id);});
+  // Also delete any polish jobs linked
+  const polishJobs=DB.where('polishJobs',p=>(p.items||[]).some(it=>serials.includes(it.serialNumber)));
+  polishJobs.forEach(pj=>DB.delete('polishJobs',pj.id));
+
   DB.delete('productions',prodId);
-  renderProductions();renderFinished();renderWorkers();updateCounts();
+  renderProductions();renderFinished();renderWorkers();renderPolish();updateCounts();
   if(document.getElementById('page-worker-profile')?.classList.contains('active'))renderWorkerProfile();
   toast(`Production deleted — materials returned to ${prod.workerName||'worker'}`,'warning');
 }
@@ -1595,6 +1622,10 @@ function renderProductions(){
         const grandTotalWages=parseFloat(p.totalWage||0);
         const grandCostPc=matCost+ohCost+(grandTotalWages/pieces);
         const ohTitle=(p.overheadsSnapshot||[]).map(o=>`${o.label}: ${fmtMoney(o.amount)}`).join('\n');
+        // Polish status for this production
+        const fgItems=DB.where('finished',f=>f.productionId===p.id);
+        const pendingPolish=fgItems.filter(f=>f.polishStatus==='pending').length;
+        const donePolish=fgItems.filter(f=>f.polishStatus==='done').length;
 
         const wageChips=`
           <div class="wage-breakdown">
@@ -1609,13 +1640,18 @@ function renderProductions(){
             <div class="prod-card-top">
               <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:0.5rem">
                 <div class="prod-card-title">${p.product}</div>
-                <button class="act-btn danger" style="flex-shrink:0;font-size:0.72rem;padding:0.25rem 0.5rem" onclick="deleteProduction('${p.id}')">🗑 Delete</button>
+                <div style="display:flex;gap:0.3rem;flex-shrink:0">
+                  ${pendingPolish>0?`<button class="act-btn" style="background:var(--amber-pale);border-color:var(--amber);color:var(--amber-dark);font-size:0.72rem" onclick="nav('polish')">🎨 ${pendingPolish} pending polish</button>`:''}
+                  <button class="act-btn danger" style="font-size:0.72rem;padding:0.25rem 0.5rem" onclick="deleteProduction('${p.id}')">🗑 Delete</button>
+                </div>
               </div>
               <div class="prod-card-meta">
                 <span class="prod-meta-chip prod-chip-worker" onclick="nav('worker-profile','${p.workerId}')"><span class="pmc-icon">👷</span>${p.workerName}</span>
                 <span class="prod-meta-chip">📅 ${fmtDate(p.date)}</span>
                 <span class="prod-meta-chip prod-chip-count">${pieces} pc${pieces>1?'s':''}</span>
                 ${subWorkers.length>0?`<span class="prod-meta-chip" style="background:var(--info-light);color:var(--info);border-color:#bfdbfe">🔧 ${subWorkers.length} sub-worker${subWorkers.length>1?'s':''}</span>`:''}
+                ${donePolish>0?`<span class="prod-meta-chip" style="background:var(--success-light);color:var(--success);border-color:#a7f3d0">✨ ${donePolish} polished</span>`:''}
+                ${pendingPolish>0?`<span class="prod-meta-chip" style="background:var(--amber-pale);color:var(--amber-dark);border-color:var(--amber-light)">🎨 ${pendingPolish} awaiting polish</span>`:''}
               </div>
             </div>
             <div class="prod-serials">${serials.map(s=>`<span class="prod-sn-tag">📟 ${s}</span>`).join('')}</div>
@@ -1639,36 +1675,451 @@ function renderProductions(){
     </div>`;
 }
 
+/* ═══════════════════════════════════════════════════
+   POLISH JOBS
+   ═══════════════════════════════════════════════════ */
+let _polishMatRows=[], _polishSubWorkerRows=[], _polishSubWCount=0, _editPolishId=null, _polishSelectedFGs=[];
+
+function openPolishModal(editId=null){
+  _editPolishId=editId;
+  _polishMatRows=[];_polishSubWorkerRows=[];_polishSubWCount=0;_polishSelectedFGs=[];
+
+  const existing=editId?DB.find('polishJobs',editId):null;
+  document.getElementById('pj-modal-ttl').textContent=existing?'Edit Polish Job':'New Polish Job';
+  document.getElementById('pj-worker-search').value=existing?DB.find('workers',existing.workerId)?.name||existing.workerName||'':'';
+  document.getElementById('pj-worker-id').value=existing?.workerId||'';
+  document.getElementById('pj-date').value=existing?.date||todayStr();
+  document.getElementById('pj-notes').value=existing?.notes||'';
+  document.getElementById('pj-main-wage-per').value=existing?.wagePerPiece||'';
+  document.getElementById('pj-main-wage-total').value=existing?.mainWage||'';
+  document.getElementById('pj-sub-workers-wrap').innerHTML='<div style="font-size:0.78rem;color:var(--text-light);text-align:center;padding:0.5rem;border:1px dashed var(--border);border-radius:8px">No sub-workers added</div>';
+
+  if(existing){
+    _polishSelectedFGs=(existing.items||[]).map(it=>it.fgId).filter(Boolean);
+    (existing.subWorkers||[]).forEach(sw=>_polishAddSubWorkerRow(sw.workerId,sw.workerName,sw.wagePerPiece,sw.totalWage));
+  }
+
+  _polishMatRows=existing?(existing.materialsUsed||[]).map(r=>({...r})):[];
+  _renderPolishMatRows();
+  _renderPolishFGSelector();
+  _updatePolishWageTotal();
+
+  buildCombo('pj-worker-search','pj-worker-drop',DB.all('workers').map(w=>w.name),val=>{
+    const w=DB.all('workers').find(w=>w.name===val);if(!w)return;
+    document.getElementById('pj-worker-id').value=w.id;
+    _renderPolishWorkerHoldings(w);
+  });
+
+  const piecesCount=_polishSelectedFGs.length||1;
+  const mwEl=document.getElementById('pj-main-wage-per');
+  const mwCl=mwEl.cloneNode(true);mwEl.parentNode.replaceChild(mwCl,mwEl);
+  document.getElementById('pj-main-wage-per').addEventListener('input',()=>_calcPolishMainWage());
+
+  const addSwBtn=document.getElementById('pj-add-sub-worker');
+  const asCl=addSwBtn.cloneNode(true);addSwBtn.parentNode.replaceChild(asCl,addSwBtn);
+  document.getElementById('pj-add-sub-worker').addEventListener('click',()=>_polishAddSubWorkerRow());
+
+  if(existing?.workerId){const w=DB.find('workers',existing.workerId);if(w)_renderPolishWorkerHoldings(w);}
+
+  openModal('modal-polish');
+  setTimeout(()=>document.getElementById('pj-worker-search')?.focus(),100);
+}
+
+function _renderPolishFGSelector(){
+  // Show all pending polish items grouped by product
+  const pending=DB.all('finished').filter(f=>f.polishStatus==='pending'&&!f.sold);
+  const wrap=document.getElementById('pj-fg-selector');if(!wrap)return;
+  if(!pending.length){wrap.innerHTML=`<div class="t-empty" style="padding:1.2rem 0"><span class="t-empty-ico">✨</span>No items awaiting polish</div>`;return;}
+  const grouped={};pending.forEach(f=>{if(!grouped[f.product])grouped[f.product]=[];grouped[f.product].push(f);});
+  wrap.innerHTML=`<div style="font-size:0.72rem;color:var(--text-tertiary);margin-bottom:0.5rem">Select items to polish in this job:</div>`+
+  Object.entries(grouped).map(([name,items])=>`
+    <div style="margin-bottom:0.6rem">
+      <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary);padding:0.2rem 0;margin-bottom:0.3rem;display:flex;align-items:center;gap:0.5rem">
+        ${name}
+        <button class="act-btn" style="font-size:0.65rem;padding:0.1rem 0.4rem" onclick="_polishSelectAll('${name.replace(/'/g,"\\'")}')">Select All</button>
+      </div>
+      ${items.map(fg=>`
+        <label style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.65rem;background:var(--bg-secondary);border:1px solid ${_polishSelectedFGs.includes(fg.id)?'var(--amber)':'var(--border)'};border-radius:7px;margin-bottom:0.25rem;cursor:pointer;transition:border-color 0.15s">
+          <input type="checkbox" id="pj-fg-${fg.id}" ${_polishSelectedFGs.includes(fg.id)?'checked':''} onchange="_onPolishFGToggle('${fg.id}',this.checked)" style="accent-color:var(--amber)"/>
+          <div style="flex:1">
+            <span style="font-family:var(--font-mono);font-size:0.8rem;font-weight:600">SN: ${fg.serialNumber}</span>
+            <span style="font-size:0.72rem;color:var(--text-tertiary);margin-left:0.5rem">👷 ${fg.workerName} · ${fmtDate(fg.date)}</span>
+          </div>
+        </label>`).join('')}
+    </div>`).join('');
+}
+
+function _polishSelectAll(productName){
+  const pending=DB.all('finished').filter(f=>f.polishStatus==='pending'&&!f.sold&&f.product===productName);
+  pending.forEach(fg=>{if(!_polishSelectedFGs.includes(fg.id))_polishSelectedFGs.push(fg.id);});
+  _renderPolishFGSelector();
+  _calcPolishMainWage();
+  _updatePolishWageTotal();
+}
+
+function _onPolishFGToggle(fgId,checked){
+  if(checked){if(!_polishSelectedFGs.includes(fgId))_polishSelectedFGs.push(fgId);}
+  else{_polishSelectedFGs=_polishSelectedFGs.filter(id=>id!==fgId);}
+  // update border
+  const lbl=document.getElementById(`pj-fg-${fgId}`)?.closest('label');
+  if(lbl)lbl.style.borderColor=checked?'var(--amber)':'var(--border)';
+  _calcPolishMainWage();
+  _updatePolishWageTotal();
+}
+
+function _renderPolishWorkerHoldings(worker){
+  const el=document.getElementById('pj-worker-holdings');if(!el)return;
+  const h=worker.holdings||[];
+  if(h.length){
+    el.innerHTML=`<div class="banner banner-warning" style="margin-bottom:0.5rem;font-size:0.77rem"><span class="banner-ico">📦</span><div><strong>Holding:</strong> ${h.map(x=>`${fmtNum(x.qty)} ${x.unit} ${x.mat}`).join(' · ')}</div></div>`;
+    if(!_polishMatRows.length){
+      _polishMatRows=h.map(x=>({mat:x.mat,qty:x.qty,unit:x.unit,maxQty:parseFloat(x.qty)}));
+      _renderPolishMatRows();
+    }
+  } else {
+    el.innerHTML='';
+  }
+}
+
+function _renderPolishMatRows(){
+  const wrap=document.getElementById('pj-mat-rows');if(!wrap)return;
+  if(!_polishMatRows.length){wrap.innerHTML=`<div style="text-align:center;padding:.7rem;border:1px dashed var(--border);border-radius:8px;font-size:0.78rem;color:var(--text-light)">Optional — add polish materials used</div>`;return;}
+  wrap.innerHTML=_polishMatRows.map((r,i)=>`
+    <div style="display:grid;grid-template-columns:1fr 90px 90px 30px;gap:0.4rem;align-items:center;margin-bottom:0.4rem">
+      <input class="finput" id="pj-mat-${i}" value="${r.mat||''}" placeholder="Material" style="font-size:0.82rem"/>
+      <span style="text-align:center;font-family:var(--font-mono);font-size:0.7rem;color:var(--text-tertiary)">max ${fmtNum(r.maxQty||0)} ${r.unit}</span>
+      <input class="finput" id="pj-qty-${i}" type="number" min="0" step="0.01" value="${r.qty||''}" placeholder="0"/>
+      <button class="row-del" onclick="polishDelMatRow(${i})">×</button>
+    </div>`).join('');
+  _polishMatRows.forEach((_,i)=>{
+    document.getElementById(`pj-mat-${i}`)?.addEventListener('input',e=>_polishMatRows[i].mat=e.target.value);
+    document.getElementById(`pj-qty-${i}`)?.addEventListener('input',e=>_polishMatRows[i].qty=parseFloat(e.target.value)||0);
+  });
+}
+function polishDelMatRow(i){_polishMatRows.splice(i,1);_renderPolishMatRows();}
+
+function _polishAddSubWorkerRow(widVal='',nameVal='',wagePerVal='',wageTotalVal=''){
+  const hint=document.getElementById('pj-sub-workers-wrap')?.querySelector('div[style*="dashed"]');
+  if(hint)hint.remove();
+  const wrap=document.getElementById('pj-sub-workers-wrap'); if(!wrap)return;
+  const i=_polishSubWCount++;
+  _polishSubWorkerRows[i]={workerId:widVal,workerName:nameVal,wagePerPiece:parseFloat(wagePerVal)||0,totalWage:parseFloat(wageTotalVal)||0};
+  const div=document.createElement('div');
+  div.id=`psw-row-${i}`;
+  div.className='sub-worker-row';
+  div.style.marginBottom='0.4rem';
+  div.innerHTML=`
+    <div class="combo-wrap">
+      <input class="finput" id="psw-name-${i}" value="${nameVal}" placeholder="Sub-worker name…" autocomplete="off" style="font-size:0.82rem"/>
+      <div class="combo-drop" id="psw-drop-${i}"></div>
+      <input type="hidden" id="psw-id-${i}" value="${widVal}"/>
+    </div>
+    <input class="finput" id="psw-per-${i}" type="number" min="0" step="1" value="${wagePerVal||''}" placeholder="₹/piece" style="font-size:0.82rem"/>
+    <input class="finput" id="psw-total-${i}" type="number" min="0" step="1" value="${wageTotalVal||''}" placeholder="Total ₹" style="font-size:0.82rem;font-weight:600"/>
+    <button class="row-del" onclick="polishSwDelRow(${i})">×</button>`;
+  wrap.appendChild(div);
+  const workerNames=DB.all('workers').filter(w=>w.id!==document.getElementById('pj-worker-id').value).map(w=>w.name);
+  buildCombo(`psw-name-${i}`,`psw-drop-${i}`,workerNames,val=>{
+    const w=DB.all('workers').find(w=>w.name===val);
+    document.getElementById(`psw-id-${i}`).value=w?.id||'';
+    _polishSubWorkerRows[i].workerId=w?.id||'';
+    _polishSubWorkerRows[i].workerName=val;
+  });
+  document.getElementById(`psw-name-${i}`).addEventListener('input',e=>{_polishSubWorkerRows[i].workerName=e.target.value;});
+  document.getElementById(`psw-per-${i}`).addEventListener('input',()=>{_calcPolishSubWage(i);_updatePolishWageTotal();});
+  document.getElementById(`psw-total-${i}`).addEventListener('input',e=>{_polishSubWorkerRows[i].totalWage=parseFloat(e.target.value)||0;_updatePolishWageTotal();});
+  setTimeout(()=>document.getElementById(`psw-name-${i}`)?.focus(),50);
+}
+
+function _calcPolishMainWage(){
+  const per=parseFloat(document.getElementById('pj-main-wage-per')?.value)||0;
+  const pcs=_polishSelectedFGs.length||1;
+  const total=per*pcs;
+  const el=document.getElementById('pj-main-wage-total');
+  if(el)el.value=total>0?total.toFixed(0):'';
+  _updatePolishWageTotal();
+}
+
+function _calcPolishSubWage(i){
+  const per=parseFloat(document.getElementById(`psw-per-${i}`)?.value)||0;
+  const pcs=_polishSelectedFGs.length||1;
+  const total=per*pcs;
+  _polishSubWorkerRows[i].wagePerPiece=per;
+  _polishSubWorkerRows[i].totalWage=total;
+  const el=document.getElementById(`psw-total-${i}`);
+  if(el)el.value=total>0?total.toFixed(0):'';
+}
+
+function _updatePolishWageTotal(){
+  const mainTotal=parseFloat(document.getElementById('pj-main-wage-total')?.value)||0;
+  const subTotal=_polishSubWorkerRows.filter(r=>!r.deleted).reduce((s,r)=>s+parseFloat(r.totalWage||0),0);
+  const grand=mainTotal+subTotal;
+  const el=document.getElementById('pj-wage-grand-total');
+  if(el){el.textContent=fmtMoney(grand);el.style.color=grand>0?'var(--amber)':'rgba(255,255,255,0.3)';}
+  // Update piece count display
+  const pcEl=document.getElementById('pj-piece-count');
+  if(pcEl)pcEl.textContent=`${_polishSelectedFGs.length} piece(s) selected`;
+}
+
+function polishSwDelRow(i){
+  const el=document.getElementById(`psw-row-${i}`); if(el)el.remove();
+  _polishSubWorkerRows[i]={workerId:'',workerName:'',wagePerPiece:0,totalWage:0,deleted:true};
+  _updatePolishWageTotal();
+  const wrap=document.getElementById('pj-sub-workers-wrap');
+  const remaining=wrap?.querySelectorAll('.sub-worker-row');
+  if(!remaining||!remaining.length){wrap.innerHTML='<div style="font-size:0.78rem;color:var(--text-light);text-align:center;padding:0.5rem;border:1px dashed var(--border);border-radius:8px">No sub-workers added</div>';}
+}
+
+function savePolishJob(){
+  const workerId=document.getElementById('pj-worker-id').value;
+  const workerTxt=document.getElementById('pj-worker-search').value.trim();
+  const date=document.getElementById('pj-date').value;
+  const notes=document.getElementById('pj-notes').value.trim();
+
+  if(!workerId&&!workerTxt){toast('Select a worker','danger');return;}
+  if(!date){toast('Select a date','danger');return;}
+  if(!_polishSelectedFGs.length){toast('Select at least one item to polish','danger');return;}
+
+  const mainWagePer=parseFloat(document.getElementById('pj-main-wage-per').value)||0;
+  const mainWageTotal=parseFloat(document.getElementById('pj-main-wage-total').value)||mainWagePer*_polishSelectedFGs.length;
+
+  const activeSubWorkers=_polishSubWorkerRows.filter((r,i)=>{
+    if(r.deleted)return false;
+    const nameEl=document.getElementById(`psw-name-${i}`);
+    const name=(nameEl?.value||r.workerName||'').trim();
+    const wid=document.getElementById(`psw-id-${i}`)?.value||r.workerId||'';
+    const per=parseFloat(document.getElementById(`psw-per-${i}`)?.value||r.wagePerPiece)||0;
+    const tot=parseFloat(document.getElementById(`psw-total-${i}`)?.value||r.totalWage)||per*_polishSelectedFGs.length;
+    r.workerName=name;r.workerId=wid;r.wagePerPiece=per;r.totalWage=tot;
+    return name.length>0;
+  });
+
+  const subWageTotal=activeSubWorkers.reduce((s,r)=>s+parseFloat(r.totalWage||0),0);
+  const totalWageAll=mainWageTotal+subWageTotal;
+
+  const worker=workerId?DB.find('workers',workerId):null;
+  const wName=worker?.name||workerTxt;
+
+  // Deduct polish materials from worker holdings
+  const used=_polishMatRows.filter(r=>r.mat&&parseFloat(r.qty)>0);
+  if(worker&&used.length){
+    const holdings=[...(worker.holdings||[])];
+    const overuse=used.filter(u=>{const h=holdings.find(h=>h.mat===u.mat);return !h||parseFloat(h.qty)<parseFloat(u.qty);});
+    if(overuse.length){toast('Insufficient holding for polish materials: '+overuse.map(u=>u.mat).join(', '),'danger');return;}
+    used.forEach(u=>{const h=holdings.find(h=>h.mat===u.mat);if(h)h.qty=Math.max(0,parseFloat(h.qty)-parseFloat(u.qty));});
+    DB.update('workers',worker.id,{holdings:holdings.filter(h=>parseFloat(h.qty||0)>0)});
+  }
+
+  // Get product name from selected FGs
+  const firstFg=DB.find('finished',_polishSelectedFGs[0]);
+  const productName=firstFg?.product||'Polish Job';
+
+  const polishItems=_polishSelectedFGs.map(fgId=>{
+    const fg=DB.find('finished',fgId);
+    return{fgId,serialNumber:fg?.serialNumber||'',product:fg?.product||''};
+  });
+
+  const polishDoc=DB.insert('polishJobs',{
+    workerId:workerId||null,
+    workerName:wName,
+    productName,
+    items:polishItems,
+    date,
+    wagePerPiece:mainWagePer,
+    mainWage:mainWageTotal,
+    subWorkers:activeSubWorkers.map(sw=>({workerId:sw.workerId||null,workerName:sw.workerName,wagePerPiece:sw.wagePerPiece,totalWage:sw.totalWage})),
+    subWageTotal,
+    totalWage:totalWageAll,
+    materialsUsed:used,
+    notes,
+    status:'done'
+  });
+
+  // Mark selected FGs as polished, store polishJobId
+  _polishSelectedFGs.forEach(fgId=>{
+    DB.update('finished',fgId,{
+      polishStatus:'done',
+      polishJobId:polishDoc.id,
+      polishWorkerName:wName,
+      polishWage:mainWageTotal/_polishSelectedFGs.length
+    });
+  });
+
+  // Update worker earnings
+  if(worker){
+    DB.update('workers',worker.id,{
+      totalJobs:(worker.totalJobs||0)+_polishSelectedFGs.length,
+      totalEarned:(worker.totalEarned||0)+mainWageTotal
+    });
+  }
+  activeSubWorkers.forEach(sw=>{
+    if(!sw.workerId)return;
+    const sw_w=DB.find('workers',sw.workerId);if(!sw_w)return;
+    DB.update('workers',sw.workerId,{
+      totalJobs:(sw_w.totalJobs||0)+_polishSelectedFGs.length,
+      totalEarned:(sw_w.totalEarned||0)+parseFloat(sw.totalWage||0)
+    });
+  });
+
+  closeModal('modal-polish');
+  renderPolish();renderFinished();renderWorkers();updateCounts();
+  if(document.getElementById('page-worker-profile')?.classList.contains('active'))renderWorkerProfile();
+  toast(`Polish job saved — ${_polishSelectedFGs.length} item(s) marked ready for sale ✨`);
+}
+
+function deletePolishJob(id){
+  const pj=DB.find('polishJobs',id);if(!pj){toast('Not found','danger');return;}
+  if(!confirm('Delete polish job? Items will be set back to "awaiting polish".'))return;
+  // Revert finished goods
+  (pj.items||[]).forEach(it=>{
+    if(it.fgId){
+      const fg=DB.find('finished',it.fgId);
+      if(fg&&fg.sold){toast('Cannot delete — some items already sold','danger');return;}
+      DB.update('finished',it.fgId,{polishStatus:'pending',polishJobId:null,polishWorkerName:null,polishWage:null});
+    }
+  });
+  // Revert worker earnings
+  const worker=pj.workerId?DB.find('workers',pj.workerId):null;
+  if(worker){
+    DB.update('workers',worker.id,{
+      totalJobs:Math.max(0,(worker.totalJobs||0)-(pj.items||[]).length),
+      totalEarned:Math.max(0,(worker.totalEarned||0)-parseFloat(pj.mainWage||0))
+    });
+  }
+  DB.delete('polishJobs',id);
+  renderPolish();renderFinished();renderWorkers();updateCounts();
+  toast('Polish job deleted','warning');
+}
+
+function renderPolish(){
+  const polishJobs=DB.all('polishJobs');
+  const pending=DB.all('finished').filter(f=>f.polishStatus==='pending'&&!f.sold);
+  const search=(document.getElementById('polish-search')?.value||'').toLowerCase();
+  const listEl=document.getElementById('polish-list');if(!listEl)return;
+
+  let html='';
+
+  // Pending items banner
+  if(pending.length){
+    const grouped={};pending.forEach(f=>{if(!grouped[f.product])grouped[f.product]=[];grouped[f.product].push(f);});
+    html+=`<div class="card" style="margin-bottom:1.2rem;border-color:var(--amber)">
+      <div class="card-hdr" style="background:var(--amber-pale)">
+        <span class="card-title" style="color:var(--amber-dark)">🎨 ${pending.length} Item(s) Awaiting Polish</span>
+        <button class="btn btn-primary btn-sm" onclick="openPolishModal(null)">+ Assign Polish Job</button>
+      </div>
+      <div class="card-body" style="padding:0">
+        ${Object.entries(grouped).map(([name,items])=>`
+          <div style="padding:0.65rem 1rem;border-bottom:1px solid var(--border-light)">
+            <div style="font-weight:700;font-size:0.85rem;color:var(--text-primary);margin-bottom:0.35rem">${name} <span style="font-size:0.72rem;font-weight:400;color:var(--text-tertiary)">${items.length} piece(s)</span></div>
+            <div style="display:flex;flex-wrap:wrap;gap:0.3rem">
+              ${items.map(f=>`<span style="font-family:var(--font-mono);font-size:0.72rem;background:var(--amber-pale);border:1px solid var(--amber-light);color:var(--amber-dark);padding:0.15rem 0.5rem;border-radius:5px">SN: ${f.serialNumber}</span>`).join('')}
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  } else {
+    html+=`<div class="banner banner-success" style="margin-bottom:1rem"><span class="banner-ico">✨</span><div><strong>All items polished!</strong> No items awaiting polish.</div></div>`;
+  }
+
+  // Polish job log
+  const filtered=polishJobs.filter(p=>(p.productName||'').toLowerCase().includes(search)||(p.workerName||'').toLowerCase().includes(search));
+  html+=`<div class="card">
+    <div class="card-hdr">
+      <span class="card-title">📋 Polish Job Log</span>
+      <span style="font-size:0.75rem;font-family:var(--font-mono);color:var(--text-tertiary)">${polishJobs.length} job(s)</span>
+    </div>`;
+
+  if(!filtered.length){
+    html+=`<div class="card-body"><div class="t-empty"><span class="t-empty-ico">🎨</span>${polishJobs.length?'No results':'No polish jobs yet'}</div></div>`;
+  } else {
+    html+=`<div class="card-body" style="padding:0">`+filtered.map(pj=>{
+      const subWorkers=pj.subWorkers||[];
+      const mainW=parseFloat(pj.mainWage||0);
+      const subW=parseFloat(pj.subWageTotal||0)||subWorkers.reduce((s,sw)=>s+parseFloat(sw.totalWage||0),0);
+      const totalW=parseFloat(pj.totalWage||mainW+subW);
+      const matCost=(pj.materialsUsed||[]).reduce((s,u)=>{const m=DB.all('materials').find(m=>m.name===u.mat);return s+parseFloat(u.qty||0)*parseFloat(m?.unitCost||0);},0);
+      return `<div style="padding:0.85rem 1rem;border-bottom:1px solid var(--border-light)">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:0.5rem;flex-wrap:wrap">
+          <div>
+            <div style="font-weight:700;font-size:0.9rem;color:var(--text-primary)">${pj.productName||'Polish Job'}</div>
+            <div style="font-size:0.74rem;color:var(--text-tertiary);margin-top:0.15rem">
+              👷 ${pj.workerName} · 📅 ${fmtDate(pj.date)} · ${(pj.items||[]).length} piece(s)
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-top:0.35rem">
+              ${(pj.items||[]).map(it=>`<span style="font-family:var(--font-mono);font-size:0.7rem;background:var(--success-light);border:1px solid #a7f3d0;color:var(--success);padding:0.1rem 0.45rem;border-radius:5px">✨ ${it.serialNumber}</span>`).join('')}
+            </div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-weight:700;color:var(--amber-dark);font-family:var(--font-mono)">${fmtMoney(totalW)}</div>
+            <div style="font-size:0.68rem;color:var(--text-tertiary)">wages${matCost>0?' + '+fmtMoney(matCost)+' mat.':''}</div>
+            <div style="display:flex;gap:0.3rem;margin-top:0.4rem;justify-content:flex-end">
+              <button class="act-btn danger" onclick="deletePolishJob('${pj.id}')">🗑</button>
+            </div>
+          </div>
+        </div>
+        ${subWorkers.length?`<div style="margin-top:0.4rem;font-size:0.72rem;color:var(--info)">🔧 Sub: ${subWorkers.map(sw=>`${sw.workerName} — ${fmtMoney(sw.totalWage||0)}`).join(', ')}</div>`:''}
+        ${pj.notes?`<div style="font-size:0.74rem;color:var(--text-tertiary);margin-top:0.3rem;font-style:italic">💬 ${pj.notes}</div>`:''}
+        ${(pj.materialsUsed||[]).length?`<div style="font-size:0.72rem;color:var(--text-light);margin-top:0.25rem">📦 Materials: ${pj.materialsUsed.map(u=>`${fmtNum(u.qty)} ${u.unit} ${u.mat}`).join(' · ')}</div>`:''}
+      </div>`;
+    }).join('')+`</div>`;
+  }
+  html+=`</div>`;
+  listEl.innerHTML=html;
+}
+
 /* ═══════════ FINISHED GOODS ═══════════ */
 function renderFinished(){
   const fin=DB.all('finished'),search=(document.getElementById('fg-search')?.value||'').toLowerCase();
-  const fl=fin.filter(f=>(f.product||'').toLowerCase().includes(search)||(f.workerName||'').toLowerCase().includes(search)||(f.serialNumber||'').toLowerCase().includes(search));
+  const _fgFilter=document.querySelector('#fg-pills .tpill.active')?.dataset.val||'all';
+  let fl=fin.filter(f=>(f.product||'').toLowerCase().includes(search)||(f.workerName||'').toLowerCase().includes(search)||(f.serialNumber||'').toLowerCase().includes(search));
+  if(_fgFilter==='pending') fl=fl.filter(f=>f.polishStatus==='pending'&&!f.sold);
+  if(_fgFilter==='polished') fl=fl.filter(f=>f.polishStatus==='done'&&!f.sold);
+  if(_fgFilter==='sold') fl=fl.filter(f=>f.sold);
   const inStock=fin.filter(f=>!f.sold).length;
+  const awaitPolish=fin.filter(f=>f.polishStatus==='pending'&&!f.sold).length;
+  const readyToSell=fin.filter(f=>f.polishStatus==='done'&&!f.sold).length;
   const statsEl=document.getElementById('fg-stats');
   if(statsEl)statsEl.innerHTML=`
     <div class="stat-card"><span class="sc-ico">✅</span><div class="sc-lbl">Total Produced</div><div class="sc-val">${fin.length}</div></div>
-    <div class="stat-card"><span class="sc-ico">📦</span><div class="sc-lbl">In Stock</div><div class="sc-val" style="color:var(--info)">${inStock}</div></div>
-    <div class="stat-card"><span class="sc-ico">🧾</span><div class="sc-lbl">Sold</div><div class="sc-val" style="color:var(--success)">${fin.length-inStock}</div></div>
+    <div class="stat-card" style="border-color:${awaitPolish?'var(--amber-light)':'var(--border)'}"><span class="sc-ico">🎨</span><div class="sc-lbl">Awaiting Polish</div><div class="sc-val" style="color:${awaitPolish?'var(--amber)':'var(--text-primary)'}">${awaitPolish}</div></div>
+    <div class="stat-card" style="border-color:var(--info-light)"><span class="sc-ico">✨</span><div class="sc-lbl">Ready to Sell</div><div class="sc-val" style="color:var(--info)">${readyToSell}</div></div>
+    <div class="stat-card"><span class="sc-ico">🧾</span><div class="sc-lbl">Sold</div><div class="sc-val" style="color:var(--success)">${fin.filter(f=>f.sold).length}</div></div>
     <div class="stat-card"><span class="sc-ico">💳</span><div class="sc-lbl">Total Wages</div><div class="sc-val" style="font-size:1.2rem">${fmtMoney(fin.reduce((s,f)=>s+parseFloat(f.totalWage||0),0))}</div></div>
     <div class="stat-card" style="border-color:var(--amber-light)"><span class="sc-ico">📦</span><div class="sc-lbl">Raw Mat. Cost</div><div class="sc-val" style="font-size:1.2rem;color:var(--amber-dark)">${fmtMoney(fin.reduce((s,f)=>s+parseFloat(f.matCostPerPiece||0),0))}</div></div>`;
   const pmap={};
-  fin.forEach(f=>{const k=f.product;if(!pmap[k])pmap[k]={name:k,total:0,inStock:0,sold:0,matCost:0,wageTotal:0};pmap[k].total++;f.sold?pmap[k].sold++:pmap[k].inStock++;pmap[k].matCost+=parseFloat(f.matCostPerPiece||0);pmap[k].wageTotal+=parseFloat(f.totalWage||0);});
+  fin.forEach(f=>{const k=f.product;if(!pmap[k])pmap[k]={name:k,total:0,inStock:0,sold:0,matCost:0,wageTotal:0,awaitPolish:0,readyToSell:0};pmap[k].total++;f.sold?pmap[k].sold++:f.polishStatus==='done'?pmap[k].readyToSell++:pmap[k].awaitPolish++;pmap[k].matCost+=parseFloat(f.matCostPerPiece||0);pmap[k].wageTotal+=parseFloat(f.totalWage||0);});
   const summaryRows=Object.values(pmap).sort((a,b)=>b.total-a.total);
   const list=document.getElementById('fg-list');if(!list)return;
-  list.innerHTML=(summaryRows.length?`<div class="card" style="margin-bottom:1.2rem"><div class="card-hdr"><span class="card-title">📊 Product Summary</span></div><div class="card-body" style="padding:0"><table class="data-table"><thead><tr><th>Product</th><th style="text-align:center">Total</th><th style="text-align:center">In Stock</th><th style="text-align:center">Sold</th><th style="text-align:right">Mat. Cost</th><th style="text-align:right">All Wages</th></tr></thead><tbody>${summaryRows.map(p=>`<tr><td class="td-name">${p.name}</td><td class="td-mono" style="text-align:center"><strong>${p.total}</strong></td><td class="td-mono" style="text-align:center;color:var(--info)">${p.inStock}</td><td class="td-mono" style="text-align:center;color:var(--success)">${p.sold}</td><td class="td-mono" style="text-align:right;color:var(--amber-dark)">${fmtMoney(p.matCost)}</td><td class="td-mono" style="text-align:right">${fmtMoney(p.wageTotal)}</td></tr>`).join('')}</tbody></table></div></div>`:'')+(fl.length?fl.map(f=>{
+  list.innerHTML=(summaryRows.length?`<div class="card" style="margin-bottom:1.2rem"><div class="card-hdr"><span class="card-title">📊 Product Summary</span></div><div class="card-body" style="padding:0"><table class="data-table"><thead><tr><th>Product</th><th style="text-align:center">Total</th><th style="text-align:center">Await Polish</th><th style="text-align:center">Ready</th><th style="text-align:center">Sold</th><th style="text-align:right">Mat. Cost</th></tr></thead><tbody>${summaryRows.map(p=>`<tr><td class="td-name">${p.name}</td><td class="td-mono" style="text-align:center"><strong>${p.total}</strong></td><td class="td-mono" style="text-align:center;color:var(--amber)">${p.awaitPolish}</td><td class="td-mono" style="text-align:center;color:var(--info)">${p.readyToSell}</td><td class="td-mono" style="text-align:center;color:var(--success)">${p.sold}</td><td class="td-mono" style="text-align:right;color:var(--amber-dark)">${fmtMoney(p.matCost)}</td></tr>`).join('')}</tbody></table></div></div>`:'')+(fl.length?fl.map(f=>{
     const matCost=parseFloat(f.matCostPerPiece||0),ohCost=parseFloat(f.ohCostPerPiece||0);
     const mainW=parseFloat(f.mainWage||f.totalWage||0), subW=parseFloat(f.subWorkersWage||0);
+    const polishW=parseFloat(f.polishWage||0);
     const subWorkers=f.subWorkers||[];
-    return `<div class="fg-card"><div class="fg-icon">🪑</div><div class="fg-body"><div class="fg-product">${f.product}</div><div style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-tertiary);margin-bottom:0.25rem">📟 ${f.serialNumber||'—'}</div><div class="fg-meta"><span>👷 ${f.workerName}</span><span>📅 ${fmtDate(f.date)}</span>${f.sold?`<span class="badge badge-success" style="font-size:0.65rem">🧾 Sold</span>`:`<span class="badge badge-info" style="font-size:0.65rem">📦 In Stock</span>`}</div>
-    <div style="display:flex;gap:0.5rem 1rem;margin-top:0.3rem;font-size:0.75rem;flex-wrap:wrap">
-      <span>💳 Main: <strong>${fmtMoney(mainW)}</strong></span>
-      ${subW>0?`<span style="color:var(--info)">🔧 Sub: <strong>${fmtMoney(subW)}</strong></span>`:''}
-      ${matCost>0?`<span>📦 Mat.: <strong style="color:var(--amber-dark)">${fmtMoney(matCost)}</strong></span>`:''}
-      ${ohCost>0?`<span>💡 OH: <strong style="color:var(--info)">${fmtMoney(ohCost)}</strong></span>`:''}
-      <span>Total cost: <strong>${fmtMoney(matCost+ohCost+mainW+subW)}</strong></span>
-    </div>
-    ${subWorkers.length>0?`<div style="font-size:0.7rem;color:var(--text-tertiary);margin-top:0.2rem">🔧 ${subWorkers.map(sw=>`${sw.workerName} (${fmtMoney(sw.wagePerPiece)}/pc)`).join(', ')}</div>`:''}
-    ${(f.materialsUsed||[]).length?`<div style="font-size:0.72rem;color:var(--text-light);margin-top:0.2rem">${f.materialsUsed.map(m=>`${fmtNum(m.qty)} ${m.unit} ${m.mat}`).join(' · ')}</div>`:''}</div><div class="acts" style="flex-direction:column;gap:0.4rem">${!f.sold?`<button class="btn btn-primary btn-sm" onclick="openSalesModal('${f.id}')">🧾 Sell</button>`:''}<button class="act-btn danger" onclick="deleteFG('${f.id}')">🗑</button></div></div>`;
+    const isAwaitingPolish=f.polishStatus==='pending'&&!f.sold;
+    const isReadyToSell=f.polishStatus==='done'&&!f.sold;
+    return `<div class="fg-card" style="${isAwaitingPolish?'border-color:var(--amber)':''}${isReadyToSell?'border-color:var(--success-light)':''}">
+      <div class="fg-icon">${isAwaitingPolish?'🎨':isReadyToSell?'✨':'🪑'}</div>
+      <div class="fg-body">
+        <div class="fg-product">${f.product}</div>
+        <div style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-tertiary);margin-bottom:0.25rem">📟 ${f.serialNumber||'—'}</div>
+        <div class="fg-meta"><span>👷 ${f.workerName}</span><span>📅 ${fmtDate(f.date)}</span>
+          ${f.sold?`<span class="badge badge-success" style="font-size:0.65rem">🧾 Sold</span>`:isReadyToSell?`<span class="badge badge-success" style="font-size:0.65rem;background:var(--info-light);color:var(--info)">✨ Ready to Sell</span>`:`<span class="badge badge-amber" style="font-size:0.65rem">🎨 Awaiting Polish</span>`}
+        </div>
+        <div style="display:flex;gap:0.5rem 1rem;margin-top:0.3rem;font-size:0.75rem;flex-wrap:wrap">
+          <span>💳 Prod: <strong>${fmtMoney(mainW)}</strong></span>
+          ${subW>0?`<span style="color:var(--info)">🔧 Sub: <strong>${fmtMoney(subW)}</strong></span>`:''}
+          ${polishW>0?`<span style="color:var(--purple)">🎨 Polish: <strong>${fmtMoney(polishW)}</strong></span>`:''}
+          ${matCost>0?`<span>📦 Mat.: <strong style="color:var(--amber-dark)">${fmtMoney(matCost)}</strong></span>`:''}
+          ${ohCost>0?`<span>💡 OH: <strong style="color:var(--info)">${fmtMoney(ohCost)}</strong></span>`:''}
+        </div>
+        ${isAwaitingPolish?`<div style="margin-top:0.4rem"><button class="btn btn-sm" style="background:var(--amber);color:#fff;font-size:0.73rem" onclick="openPolishModal(null)">🎨 Assign Polish</button></div>`:''}
+        ${(f.materialsUsed||[]).length?`<div style="font-size:0.72rem;color:var(--text-light);margin-top:0.2rem">${f.materialsUsed.map(m=>`${fmtNum(m.qty)} ${m.unit} ${m.mat}`).join(' · ')}</div>`:''}</div>
+      <div class="acts" style="flex-direction:column;gap:0.4rem">
+        ${!f.sold&&isReadyToSell?`<button class="btn btn-primary btn-sm" onclick="openSalesModal('${f.id}')">🧾 Sell</button>`:''}
+        ${!f.sold&&isAwaitingPolish?`<button class="btn btn-ghost btn-sm" style="font-size:0.7rem;color:var(--text-tertiary)" disabled title="Polish first">🔒 Sell</button>`:''}
+        <button class="act-btn danger" onclick="deleteFG('${f.id}')">🗑</button>
+      </div>
+    </div>`;
   }).join(''):`<div class="table-card"><div class="t-empty"><span class="t-empty-ico">✅</span>${fin.length?'No results':'No finished goods yet'}</div></div>`);
 }
 function deleteFG(id){if(!confirm('Delete this record?'))return;DB.delete('finished',id);renderFinished();updateCounts();toast('Deleted','warning');}
@@ -1700,7 +2151,13 @@ function openSalesModal(preloadFgId=null,editSaleId=null){
     const titleEl=document.querySelector('#modal-sales .modal-title');if(titleEl)titleEl.textContent='New Sales Bill';
   }
   _renderCart();
-  if(preloadFgId&&!editSaleId){const fg=DB.find('finished',preloadFgId);if(fg&&!fg.sold)_addToCart(fg);}
+  if(preloadFgId&&!editSaleId){
+    const fg=DB.find('finished',preloadFgId);
+    if(fg&&!fg.sold){
+      if(fg.polishStatus==='pending'){toast('This item must be polished before selling','warning');closeModal('modal-sales');return;}
+      _addToCart(fg);
+    }
+  }
   const psEl=document.getElementById('fsl-prod-search'),psCl=psEl.cloneNode(true);psEl.parentNode.replaceChild(psCl,psEl);
   document.getElementById('fsl-prod-search').addEventListener('input',_onProductSearch);
   const txEl=document.getElementById('fsl-tax-pct'),txCl=txEl.cloneNode(true);txEl.parentNode.replaceChild(txCl,txEl);
@@ -1714,8 +2171,10 @@ function _onProductSearch(){
   const q=(document.getElementById('fsl-prod-search')?.value||'').toLowerCase().trim();
   const resEl=document.getElementById('fsl-serial-results');if(!resEl)return;
   if(!q){resEl.innerHTML='';return;}
+  // Only show POLISHED (done) unsold items
   const unsold=DB.all('finished').filter(f=>{
     if(_cartItems.find(c=>c.fgId===f.id))return false;
+    if(f.polishStatus!=='done')return false; // must be polished
     if(!f.sold)return true;
     if(_editSaleId&&f.saleId===_editSaleId)return true;
     return false;
@@ -1723,17 +2182,27 @@ function _onProductSearch(){
   const byProduct=unsold.filter(f=>f.product.toLowerCase().includes(q));
   const bySerial=unsold.filter(f=>f.serialNumber.toLowerCase().includes(q)&&!byProduct.find(p=>p.id===f.id));
   const results=[...byProduct,...bySerial];
-  if(!results.length){resEl.innerHTML=`<div style="font-size:0.76rem;color:var(--text-tertiary);padding:0.5rem 0.2rem">No unsold products match "<em>${q}</em>"</div>`;return;}
+  if(!results.length){
+    // Check if there are pending polish items matching the search
+    const pendingMatch=DB.all('finished').filter(f=>!f.sold&&f.polishStatus==='pending'&&(f.product.toLowerCase().includes(q)||f.serialNumber.toLowerCase().includes(q)));
+    if(pendingMatch.length){
+      resEl.innerHTML=`<div style="font-size:0.76rem;padding:0.5rem;background:var(--amber-pale);border:1px solid var(--amber-light);border-radius:7px;color:var(--amber-dark)">🎨 <strong>${pendingMatch.length} item(s) found but awaiting polish</strong> — complete polish job first before selling.</div>`;
+    } else {
+      resEl.innerHTML=`<div style="font-size:0.76rem;color:var(--text-tertiary);padding:0.5rem 0.2rem">No polished products match "<em>${q}</em>"</div>`;
+    }
+    return;
+  }
   const grouped={};results.forEach(f=>{if(!grouped[f.product])grouped[f.product]=[];grouped[f.product].push(f);});
   resEl.innerHTML=Object.entries(grouped).map(([name,items])=>`
     <div style="margin-bottom:0.6rem">
       <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary);padding:0.2rem 0;margin-bottom:0.2rem">${name} · ${items.length} available</div>
       ${items.map(fg=>{
-        const ic=parseFloat(fg.matCostPerPiece||0)+parseFloat(fg.ohCostPerPiece||0)+parseFloat(fg.totalWage||0);
+        const ic=parseFloat(fg.matCostPerPiece||0)+parseFloat(fg.ohCostPerPiece||0)+parseFloat(fg.totalWage||0)+parseFloat(fg.polishWage||0);
         return `<div style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.65rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:7px;margin-bottom:0.25rem">
           <div style="flex:1;min-width:0">
             <span style="font-family:var(--font-mono);font-size:0.8rem;font-weight:600;color:var(--text-primary)">SN: ${fg.serialNumber}</span>
             <span style="font-size:0.72rem;color:var(--text-tertiary);margin-left:0.5rem">👷 ${fg.workerName} · ${fmtDate(fg.date)}</span>
+            <span class="badge badge-success" style="font-size:0.6rem;margin-left:0.3rem">✨ Polished</span>
             ${ic>0?`<div style="font-size:0.69rem;color:var(--amber-dark)">Internal cost: ${fmtMoney(ic)}</div>`:''}
           </div>
           <button onclick="_addToCart_byId('${fg.id}')" class="sn-add-btn" title="Add to bill">+</button>
@@ -1743,8 +2212,9 @@ function _onProductSearch(){
 }
 function _addToCart_byId(fgId){const fg=DB.find('finished',fgId);if(fg)_addToCart(fg);}
 function _addToCart(fg){
+  if(fg.polishStatus==='pending'){toast('This item must be polished before selling','warning');return;}
   if(_cartItems.find(c=>c.fgId===fg.id)){toast('Already in cart','warning');return;}
-  _cartItems.push({fgId:fg.id,product:fg.product,serialNumber:fg.serialNumber,workerName:fg.workerName,date:fg.date,matCostPerPiece:parseFloat(fg.matCostPerPiece||0),ohCostPerPiece:parseFloat(fg.ohCostPerPiece||0),totalWage:parseFloat(fg.totalWage||0),price:0});
+  _cartItems.push({fgId:fg.id,product:fg.product,serialNumber:fg.serialNumber,workerName:fg.workerName,date:fg.date,matCostPerPiece:parseFloat(fg.matCostPerPiece||0),ohCostPerPiece:parseFloat(fg.ohCostPerPiece||0),totalWage:parseFloat(fg.totalWage||0)+parseFloat(fg.polishWage||0),price:0});
   _onProductSearch();_renderCart();toast(`Added: ${fg.product} (${fg.serialNumber})`);
 }
 function _renderCart(){
@@ -1878,20 +2348,24 @@ function deleteSale(id){
 
 /* ═══════════ REPORTS ═══════════ */
 function renderReports(){
-  const mats=DB.all('materials'),workers=DB.all('workers'),prods=DB.all('productions'),fin=DB.all('finished'),sales=DB.all('sales');
+  const mats=DB.all('materials'),workers=DB.all('workers'),prods=DB.all('productions'),fin=DB.all('finished'),sales=DB.all('sales'),polishJobs=DB.all('polishJobs');
   const stockVal=mats.reduce((s,m)=>s+parseFloat(m.qty||0)*parseFloat(m.unitCost||0),0);
   const wages=prods.reduce((s,p)=>s+parseFloat(p.totalWage||0),0);
+  const polishWages=polishJobs.reduce((s,p)=>s+parseFloat(p.totalWage||0),0);
   const revenue=sales.reduce((s,sl)=>s+parseFloat(sl.totalAmount||sl.amount||0),0);
+  const awaitPolish=fin.filter(f=>f.polishStatus==='pending'&&!f.sold).length;
   const body=document.getElementById('report-summary-body');if(!body)return;
   body.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.9rem">
     <div class="stat-card"><span class="sc-ico">📦</span><div class="sc-lbl">Stock Value</div><div class="sc-val" style="font-size:1.1rem">${fmtMoney(stockVal)}</div></div>
     <div class="stat-card"><span class="sc-ico">👷</span><div class="sc-lbl">Workers</div><div class="sc-val">${workers.length}</div></div>
     <div class="stat-card"><span class="sc-ico">🏭</span><div class="sc-lbl">Productions</div><div class="sc-val">${prods.length}</div></div>
-    <div class="stat-card"><span class="sc-ico">💳</span><div class="sc-lbl">All Wages</div><div class="sc-val" style="font-size:1.1rem">${fmtMoney(wages)}</div></div>
+    <div class="stat-card"><span class="sc-ico">🎨</span><div class="sc-lbl">Polish Jobs</div><div class="sc-val">${polishJobs.length}</div><div class="sc-sub">${awaitPolish} pending</div></div>
+    <div class="stat-card"><span class="sc-ico">💳</span><div class="sc-lbl">Prod Wages</div><div class="sc-val" style="font-size:1.1rem">${fmtMoney(wages)}</div></div>
+    <div class="stat-card"><span class="sc-ico">🎨</span><div class="sc-lbl">Polish Wages</div><div class="sc-val" style="font-size:1.1rem">${fmtMoney(polishWages)}</div></div>
     <div class="stat-card"><span class="sc-ico">💰</span><div class="sc-lbl">Revenue</div><div class="sc-val" style="font-size:1.1rem;color:var(--success)">${fmtMoney(revenue)}</div></div>
-    <div class="stat-card" style="border-color:${revenue-wages>=0?'var(--success-light)':'var(--danger-light)'}"><span class="sc-ico">${revenue-wages>=0?'📈':'📉'}</span><div class="sc-lbl">Gross Profit</div><div class="sc-val" style="font-size:1.1rem;color:${revenue-wages>=0?'var(--success)':'var(--danger)'}">${fmtMoney(revenue-wages)}</div></div>
+    <div class="stat-card" style="border-color:${revenue-(wages+polishWages)>=0?'var(--success-light)':'var(--danger-light)'}"><span class="sc-ico">${revenue-(wages+polishWages)>=0?'📈':'📉'}</span><div class="sc-lbl">Gross Profit</div><div class="sc-val" style="font-size:1.1rem;color:${revenue-(wages+polishWages)>=0?'var(--success)':'var(--danger)'}">${fmtMoney(revenue-(wages+polishWages))}</div></div>
     <div class="stat-card"><span class="sc-ico">⚠️</span><div class="sc-lbl">Low/Out Stock</div><div class="sc-val" style="color:${mats.filter(m=>stockStatus(m)!=='ok').length?'var(--warning)':'var(--success)'}">${mats.filter(m=>stockStatus(m)!=='ok').length}</div></div>
-    <div class="stat-card"><span class="sc-ico">✅</span><div class="sc-lbl">In Stock</div><div class="sc-val">${fin.filter(f=>!f.sold).length}</div></div>
+    <div class="stat-card"><span class="sc-ico">✨</span><div class="sc-lbl">Ready to Sell</div><div class="sc-val">${fin.filter(f=>f.polishStatus==='done'&&!f.sold).length}</div></div>
   </div>`;
 }
 function exportDataJSON(){
@@ -2095,6 +2569,64 @@ function createModals(){
     </div>
   </div>
 
+  <div class="modal-backdrop" id="modal-polish">
+    <div class="modal modal-lg">
+      <div class="modal-hdr">
+        <div><h3 class="modal-title" id="pj-modal-ttl">New Polish Job</h3><p class="modal-sub">Assign workers to polish finished items</p></div>
+        <button class="modal-close" onclick="closeModal('modal-polish')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="approve-section">
+          <p class="section-label">Select Items to Polish</p>
+          <div id="pj-fg-selector"></div>
+          <div style="font-size:0.72rem;color:var(--amber-dark);margin-top:0.4rem" id="pj-piece-count">0 piece(s) selected</div>
+        </div>
+        <div class="approve-section">
+          <p class="section-label">Worker Details</p>
+          <div class="form-row">
+            <div class="field-group"><label>Main Worker *</label><div class="combo-wrap"><input class="finput" id="pj-worker-search" type="text" placeholder="Select worker…" autocomplete="off"/><div class="combo-drop" id="pj-worker-drop"></div><input type="hidden" id="pj-worker-id"/></div></div>
+            <div class="field-group"><label>Date *</label><input class="finput" id="pj-date" type="date"/></div>
+          </div>
+          <div id="pj-worker-holdings"></div>
+        </div>
+        <div class="approve-section" style="padding:0;overflow:hidden;border-radius:10px;border:1px solid var(--border)">
+          <div class="wage-section-hdr">
+            <span class="wage-section-title">💳 Wages</span>
+            <span class="wage-section-total" id="pj-wage-grand-total" style="color:rgba(255,255,255,0.3)">₹0.00</span>
+          </div>
+          <div style="padding:0.75rem 0.85rem;display:flex;flex-direction:column;gap:0.6rem">
+            <div>
+              <div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--amber-dark);margin-bottom:0.35rem">Main Worker</div>
+              <div class="main-wage-row">
+                <div class="main-wage-label">👷 Polish Worker</div>
+                <input class="finput" id="pj-main-wage-per" type="number" min="0" step="1" placeholder="₹ per piece"/>
+                <input class="finput" id="pj-main-wage-total" type="number" min="0" step="1" placeholder="Total ₹" style="font-weight:700;background:var(--bg-secondary)" readonly/>
+              </div>
+            </div>
+            <div class="sub-worker-divider">Sub-Workers</div>
+            <div style="display:grid;grid-template-columns:1fr 110px 90px 28px;gap:0.4rem;font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-light);padding:0 0.1rem">
+              <span>Worker Name</span><span>₹ / Piece</span><span>Total ₹</span><span></span>
+            </div>
+            <div id="pj-sub-workers-wrap">
+              <div style="font-size:0.78rem;color:var(--text-light);text-align:center;padding:0.5rem;border:1px dashed var(--border);border-radius:8px">No sub-workers added</div>
+            </div>
+            <button class="add-row-btn" id="pj-add-sub-worker" style="margin:0">+ Add Sub-Worker</button>
+          </div>
+        </div>
+        <div class="approve-section">
+          <p class="section-label">Polish Materials Used <span style="font-weight:400;font-size:0.7rem;color:var(--text-tertiary)">(optional)</span></p>
+          <div id="pj-mat-rows"></div>
+          <button class="add-row-btn" id="pj-add-mat-row">+ Add Material Row</button>
+        </div>
+        <div class="form-row"><div class="field-group fg-full"><label>Notes</label><input class="finput" id="pj-notes" type="text" placeholder="Optional…"/></div></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="closeModal('modal-polish')">Cancel</button>
+        <button class="btn btn-primary" onclick="savePolishJob()">✨ Save Polish Job</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="modal-sales">
     <div class="modal modal-lg"><div class="modal-hdr"><div><h3 class="modal-title">New Sales Bill</h3><p class="modal-sub">Search by product name — add serial numbers to cart</p></div><button class="modal-close" onclick="closeModal('modal-sales')">×</button></div>
     <div class="modal-body">
@@ -2128,39 +2660,3 @@ function createModals(){
   `;
   document.querySelectorAll('.modal-backdrop').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)el.classList.remove('open');}));
 }
-
-document.addEventListener('DOMContentLoaded',()=>{
-  createModals();
-  document.getElementById('menu-toggle')?.addEventListener('click',()=>{document.getElementById('sidebar').classList.toggle('open');document.getElementById('page-overlay').classList.toggle('show');});
-  document.getElementById('page-overlay')?.addEventListener('click',()=>{document.getElementById('sidebar').classList.remove('open');document.getElementById('page-overlay').classList.remove('show');});
-  document.querySelectorAll('.nav-btn[data-page]').forEach(b=>b.addEventListener('click',()=>nav(b.dataset.page)));
-  document.getElementById('mat-search')?.addEventListener('input',renderMaterials);
-  document.querySelectorAll('#mat-pills .tpill').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#mat-pills .tpill').forEach(x=>x.classList.remove('active'));b.classList.add('active');_matFilter=b.dataset.val;renderMaterials();}));
-  document.getElementById('mat-save')?.addEventListener('click',saveMat);
-  document.getElementById('sup-search')?.addEventListener('input',renderSuppliers);
-  document.getElementById('worker-search')?.addEventListener('input',renderWorkers);
-  document.querySelectorAll('#worker-pills .tpill').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#worker-pills .tpill').forEach(x=>x.classList.remove('active'));b.classList.add('active');_workerFilter=b.dataset.val;renderWorkers();}));
-  document.getElementById('worker-save')?.addEventListener('click',saveWorker);
-  document.getElementById('tpl-search')?.addEventListener('input',renderTemplates);
-  document.getElementById('tpl-add-row')?.addEventListener('click',()=>{_tplMatRows.push({mat:'',qty:'',unit:''});renderTplMatRows();});
-  document.getElementById('tpl-add-overhead')?.addEventListener('click',()=>{_tplOverheadRows.push({label:'',amount:0});renderTplOverheadRows();});
-  document.getElementById('tpl-save')?.addEventListener('click',saveTemplate);
-  document.getElementById('fi-add-row')?.addEventListener('click',()=>{_issueRows.push({mat:'',qty:0,unit:''});renderIssueRows();});
-  document.getElementById('fi-save')?.addEventListener('click',saveIssuance);
-  document.getElementById('fp-add-row')?.addEventListener('click',()=>{_prodMatRows.push({mat:'',qty:'',unit:'',maxQty:0});renderProdMatRows();});
-  document.getElementById('fp-save')?.addEventListener('click',saveProduction);
-  document.getElementById('prod-search')?.addEventListener('input',renderProductions);
-  document.getElementById('fg-search')?.addEventListener('input',renderFinished);
-  document.getElementById('sales-search')?.addEventListener('input',renderSales);
-  document.getElementById('import-file-input')?.addEventListener('change',e=>importDataJSON(e.target.files[0]));
-
-  document.addEventListener('input', e => {
-    if(e.target && e.target.id === 'fp-worker-search') {
-      const lbl = document.getElementById('fp-main-worker-label');
-      const val = e.target.value.trim();
-      if(lbl){ lbl.textContent = val||'Select worker above'; lbl.style.fontStyle=val?'normal':'italic'; lbl.style.color=val?'var(--amber-dark)':'var(--text-tertiary)'; }
-    }
-  });
-
-  updateDate();setInterval(updateDate,60000);updateCounts();nav('dashboard');
-});
