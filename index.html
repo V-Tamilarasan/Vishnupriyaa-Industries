@@ -54,6 +54,11 @@
         <svg viewBox="0 0 24 24"><path d="M2 20h20"/><path d="M5 20V8l7-5 7 5v12"/><path d="M9 20v-5h6v5"/></svg>
         <span>Production Log</span><span class="nav-count" id="nc-productions">0</span>
       </button>
+      <!-- ✅ POLISH nav button — referenced in PAGE_CONFIG and updateCounts -->
+      <button class="nav-btn" data-page="polish">
+        <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 1 10 10"/><path d="M12 6a6 6 0 0 1 6 6"/><circle cx="12" cy="12" r="2"/><path d="M2 12a10 10 0 0 0 10 10"/></svg>
+        <span>Polish Jobs</span><span class="nav-count" id="nc-polish">0</span>
+      </button>
       <button class="nav-btn" data-page="finished">
         <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
         <span>Finished Goods</span><span class="nav-count success" id="nc-finished">0</span>
@@ -149,27 +154,21 @@
     <div class="toolbar">
       <div class="search-wrap">
         <span class="search-ico">⌕</span>
-        <input type="text" class="search-input" id="mat-search" placeholder="Search materials…"/>
+        <input type="text" class="search-input" id="mat-search" placeholder="Search materials…" oninput="renderMaterials()"/>
       </div>
       <div class="toolbar-pills" id="mat-pills">
-        <button class="tpill active" data-val="all">All</button>
-        <button class="tpill" data-val="ok">In Stock</button>
-        <button class="tpill" data-val="low">Low</button>
-        <button class="tpill" data-val="out">Out</button>
+        <button class="tpill active" data-val="all"    onclick="_setMatFilter(this,'all')">All</button>
+        <button class="tpill"        data-val="ok"     onclick="_setMatFilter(this,'ok')">In Stock</button>
+        <button class="tpill"        data-val="low"    onclick="_setMatFilter(this,'low')">Low</button>
+        <button class="tpill"        data-val="out"    onclick="_setMatFilter(this,'out')">Out</button>
       </div>
     </div>
     <div class="table-card">
       <table class="data-table">
         <thead>
           <tr>
-            <th>Material</th>
-            <th>Category</th>
-            <th>Qty</th>
-            <th>Unit</th>
-            <th>Unit Cost</th>
-            <th>Stock Value</th>
-            <th>Status</th>
-            <th></th>
+            <th>Material</th><th>Category</th><th>Qty</th><th>Unit</th>
+            <th>Unit Cost</th><th>Stock Value</th><th>Status</th><th></th>
           </tr>
         </thead>
         <tbody id="mat-tbody"></tbody>
@@ -188,7 +187,7 @@
     <div class="toolbar">
       <div class="search-wrap">
         <span class="search-ico">⌕</span>
-        <input type="text" class="search-input" id="sup-search" placeholder="Search bills…"/>
+        <input type="text" class="search-input" id="sup-search" placeholder="Search bills…" oninput="renderSuppliers()"/>
       </div>
     </div>
     <div id="sup-list"></div>
@@ -201,32 +200,26 @@
     <div class="toolbar">
       <div class="search-wrap">
         <span class="search-ico">⌕</span>
-        <input type="text" class="search-input" id="worker-search" placeholder="Search workers…"/>
+        <input type="text" class="search-input" id="worker-search" placeholder="Search workers…" oninput="renderWorkers()"/>
       </div>
       <div class="toolbar-pills" id="worker-pills">
-        <button class="tpill active" data-val="all">All</button>
-        <button class="tpill" data-val="holding">Holding Materials</button>
-        <button class="tpill" data-val="free">Free</button>
+        <button class="tpill active" data-val="all"     onclick="_setWorkerFilter(this,'all')">All</button>
+        <button class="tpill"        data-val="holding" onclick="_setWorkerFilter(this,'holding')">Holding Materials</button>
+        <button class="tpill"        data-val="free"    onclick="_setWorkerFilter(this,'free')">Free</button>
       </div>
     </div>
     <div class="table-card">
       <table class="data-table">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Phone</th>
-            <th>Skill</th>
-            <th>Jobs</th>
-            <th>Earnings</th>
-            <th>Holding</th>
-            <th></th>
+            <th>Name</th><th>Phone</th><th>Skill</th><th>Jobs</th>
+            <th>Earnings</th><th>Holding</th><th></th>
           </tr>
         </thead>
         <tbody id="worker-tbody"></tbody>
       </table>
       <div class="table-foot">
-        <span id="worker-foot"></span>
-        <span></span>
+        <span id="worker-foot"></span><span></span>
       </div>
     </div>
   </div>
@@ -248,7 +241,7 @@
     <div class="toolbar">
       <div class="search-wrap">
         <span class="search-ico">⌕</span>
-        <input type="text" class="search-input" id="tpl-search" placeholder="Search templates…"/>
+        <input type="text" class="search-input" id="tpl-search" placeholder="Search templates…" oninput="renderTemplates()"/>
       </div>
     </div>
     <div id="tpl-grid"></div>
@@ -261,10 +254,24 @@
     <div class="toolbar">
       <div class="search-wrap">
         <span class="search-ico">⌕</span>
-        <input type="text" class="search-input" id="prod-search" placeholder="Search production…"/>
+        <input type="text" class="search-input" id="prod-search" placeholder="Search production…" oninput="renderProductions()"/>
       </div>
     </div>
     <div id="prod-list"></div>
+  </div>
+</section>
+
+<!-- ══════════════════════ POLISH JOBS ══════════════════════ -->
+<!-- ✅ MISSING PAGE — JS has PAGE_CONFIG entry 'polish' + renderPolish() + polish-list + polish-search -->
+<section class="page" id="page-polish">
+  <div class="page-inner">
+    <div class="toolbar">
+      <div class="search-wrap">
+        <span class="search-ico">⌕</span>
+        <input type="text" class="search-input" id="polish-search" placeholder="Search polish jobs…" oninput="renderPolish()"/>
+      </div>
+    </div>
+    <div id="polish-list"></div>
   </div>
 </section>
 
@@ -275,7 +282,14 @@
     <div class="toolbar" style="margin-top:0">
       <div class="search-wrap">
         <span class="search-ico">⌕</span>
-        <input type="text" class="search-input" id="fg-search" placeholder="Search goods…"/>
+        <input type="text" class="search-input" id="fg-search" placeholder="Search goods…" oninput="renderFinished()"/>
+      </div>
+      <!-- ✅ fg-pills — JS does querySelector('#fg-pills .tpill.active') -->
+      <div class="toolbar-pills" id="fg-pills">
+        <button class="tpill active" data-val="all"      onclick="_setFgFilter(this,'all')">All</button>
+        <button class="tpill"        data-val="pending"  onclick="_setFgFilter(this,'pending')">🎨 Awaiting Polish</button>
+        <button class="tpill"        data-val="polished" onclick="_setFgFilter(this,'polished')">✨ Ready to Sell</button>
+        <button class="tpill"        data-val="sold"     onclick="_setFgFilter(this,'sold')">Sold</button>
       </div>
     </div>
     <div id="fg-list"></div>
@@ -289,7 +303,7 @@
     <div class="toolbar" style="margin-top:0">
       <div class="search-wrap">
         <span class="search-ico">⌕</span>
-        <input type="text" class="search-input" id="sales-search" placeholder="Search sales…"/>
+        <input type="text" class="search-input" id="sales-search" placeholder="Search sales…" oninput="renderSales()"/>
       </div>
     </div>
     <div id="sales-list"></div>
@@ -318,7 +332,7 @@
             <p style="font-size:0.75rem;color:var(--text-tertiary);margin-bottom:0.6rem">Load a .json backup file</p>
             <label class="btn btn-ghost btn-sm" style="width:100%;cursor:pointer;text-align:center">
               ⬆ Import
-              <input type="file" id="import-file-input" accept=".json" style="display:none"/>
+              <input type="file" id="import-file-input" accept=".json" style="display:none" onchange="importDataJSON(this.files[0])"/>
             </label>
           </div>
           <div class="stat-card" style="padding:0.8rem;text-align:left">
@@ -352,6 +366,85 @@
 <!-- ══════════════════════ MODALS CONTAINER ══════════════════════ -->
 <div id="modals-container"></div>
 
+<!-- ══════════════════════ SCRIPTS ══════════════════════ -->
+<script>
+/* ─── DB bootstrap: _c must be declared before the DB IIFE runs ─── */
+var _c = {};
+</script>
 <script src="script.js"></script>
+<script>
+/* ─── Pill helper functions wired from HTML onclick attrs ─── */
+function _setMatFilter(el, val) {
+  _matFilter = val;
+  document.querySelectorAll('#mat-pills .tpill').forEach(b => b.classList.toggle('active', b === el));
+  renderMaterials();
+}
+function _setWorkerFilter(el, val) {
+  _workerFilter = val;
+  document.querySelectorAll('#worker-pills .tpill').forEach(b => b.classList.toggle('active', b === el));
+  renderWorkers();
+}
+function _setFgFilter(el, val) {
+  document.querySelectorAll('#fg-pills .tpill').forEach(b => b.classList.toggle('active', b === el));
+  renderFinished();
+}
+
+/* ─── Wire buttons that JS creates in modal HTML but never addEventListener-s ─── */
+document.addEventListener('DOMContentLoaded', () => {
+  /* createModals() is called somewhere — make sure it runs */
+  createModals();
+
+  /* mat-save */
+  document.getElementById('mat-save')?.addEventListener('click', saveMat);
+  /* worker-save */
+  document.getElementById('worker-save')?.addEventListener('click', saveWorker);
+  /* tpl-save */
+  document.getElementById('tpl-save')?.addEventListener('click', saveTemplate);
+  /* tpl-add-row */
+  document.getElementById('tpl-add-row')?.addEventListener('click', () => {
+    _tplMatRows.push({ mat: '', qty: 0, unit: '' });
+    renderTplMatRows();
+  });
+  /* tpl-add-overhead */
+  document.getElementById('tpl-add-overhead')?.addEventListener('click', () => {
+    _tplOverheadRows.push({ label: '', amount: 0 });
+    renderTplOverheadRows();
+  });
+  /* fi-add-row */
+  document.getElementById('fi-add-row')?.addEventListener('click', () => {
+    _issueRows.push({ mat: '', qty: 0, unit: '' });
+    renderIssueRows();
+  });
+  /* fi-save */
+  document.getElementById('fi-save')?.addEventListener('click', saveIssuance);
+  /* fp-save */
+  document.getElementById('fp-save')?.addEventListener('click', saveProduction);
+  /* pj-add-mat-row */
+  document.getElementById('pj-add-mat-row')?.addEventListener('click', () => {
+    _polishMatRows.push({ mat: '', qty: 0, unit: '', maxQty: 0 });
+    _renderPolishMatRows();
+  });
+
+  /* sidebar mobile toggle */
+  document.getElementById('menu-toggle')?.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+    document.getElementById('page-overlay').classList.toggle('show');
+  });
+  document.getElementById('page-overlay')?.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('page-overlay').classList.remove('show');
+  });
+
+  /* nav-btn routing */
+  document.querySelectorAll('.nav-btn[data-page]').forEach(btn => {
+    btn.addEventListener('click', () => nav(btn.dataset.page));
+  });
+
+  /* initialise */
+  updateDate();
+  updateCounts();
+  nav('dashboard');
+});
+</script>
 </body>
 </html>
