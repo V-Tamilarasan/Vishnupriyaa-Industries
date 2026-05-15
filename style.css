@@ -1167,6 +1167,17 @@ label {
 }
 
 /* ════════════════════════════════════════════════
+   POLISH FG SELECTOR — checkbox labels
+   ════════════════════════════════════════════════ */
+#pj-fg-selector label {
+  font-size:0.82rem; font-weight:400; text-transform:none;
+  letter-spacing:0; color:var(--text-secondary); cursor:pointer;
+}
+#pj-fg-selector input[type="checkbox"] {
+  width:15px; height:15px; flex-shrink:0; cursor:pointer;
+}
+
+/* ════════════════════════════════════════════════
    RESPONSIVE
    ════════════════════════════════════════════════ */
 @media (max-width:900px) {
