@@ -1209,21 +1209,24 @@ function renderTplPolishMatRows() {
     <button class="row-del" onclick="tplDelPolishRow(${i})">×</button>
   </div>`).join('');
   _tplPolishMatRows.forEach((_, i) => {
-    document.getElementById(`tpl-pmqty-${i}`)?.addEventListener('input', e => { _tplPolishMatRows[i].qty = parseFloat(e.target.value) || 0; });
-    document.getElementById(`tpl-pm-${i}`)?.addEventListener('input', e => _tplPolishMatRows[i].mat = e.target.value);
+    document.getElementById(`tpl-pmqty-${i}`)?.addEventListener('input', e => { _tplPolishMatRows[i].qty = parseFloat(e.target.value) || 0; _updateTplCostPreview(); });
+    document.getElementById(`tpl-pm-${i}`)?.addEventListener('input', e => { _tplPolishMatRows[i].mat = e.target.value; _updateTplCostPreview(); });
     document.getElementById(`tpl-pmunit-${i}`)?.addEventListener('input', e => { _tplPolishMatRows[i].unit = e.target.value; DB.saveUnit(e.target.value); });
     buildCombo(`tpl-pmunit-${i}`, `tpl-pmunit-drop-${i}`, DB.savedUnits(), val => { _tplPolishMatRows[i].unit = val; DB.saveUnit(val); });
-    buildCombo(`tpl-pm-${i}`, `tpl-pm-drop-${i}`, mats.map(m => m.name), val => { _tplPolishMatRows[i].mat = val; const m = mats.find(m => m.name === val); if (m) { _tplPolishMatRows[i].unit = m.unit || ''; const u = document.getElementById(`tpl-pmunit-${i}`); if (u) u.value = m.unit || ''; } });
+    buildCombo(`tpl-pm-${i}`, `tpl-pm-drop-${i}`, mats.map(m => m.name), val => { _tplPolishMatRows[i].mat = val; const m = mats.find(m => m.name === val); if (m) { _tplPolishMatRows[i].unit = m.unit || ''; const u = document.getElementById(`tpl-pmunit-${i}`); if (u) u.value = m.unit || ''; } _updateTplCostPreview(); });
   });
+  _updateTplCostPreview();
 }
+
 function tplDelPolishRow(i) { _tplPolishMatRows.splice(i, 1); renderTplPolishMatRows(); }
 function _updateTplCostPreview() {
   const mats = DB.all('materials');
   const matCost = _tplMatRows.reduce((s, r) => { const m = mats.find(m => m.name === r.mat); return s + parseFloat(r.qty || 0) * parseFloat(m?.unitCost || 0); }, 0);
+  const polishMatCost = _tplPolishMatRows.reduce((s, r) => { const m = mats.find(m => m.name === r.mat); return s + parseFloat(r.qty || 0) * parseFloat(m?.unitCost || 0); }, 0);
   const ohCost = _tplOverheadRows.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
-  const total = matCost + ohCost;
+  const total = matCost + polishMatCost + ohCost;
   const el = document.getElementById('tpl-total-cost-preview'); if (!el) return;
-  if (total > 0) el.innerHTML = `<div style="display:flex;gap:1rem;flex-wrap:wrap;padding:0.5rem 0.7rem;background:var(--amber-pale);border-radius:7px;font-size:0.78rem">${matCost > 0 ? `<span>📦 Materials: <strong style="color:var(--amber-dark)">${fmtMoney(matCost)}</strong></span>` : ''} ${ohCost > 0 ? `<span>💡 Overhead: <strong style="color:var(--amber-dark)">${fmtMoney(ohCost)}</strong></span>` : ''}<span>✅ <strong>Total/piece: ${fmtMoney(total)}</strong></span></div>`;
+  if (total > 0) el.innerHTML = `<div style="display:flex;gap:1rem;flex-wrap:wrap;padding:0.5rem 0.7rem;background:var(--amber-pale);border-radius:7px;font-size:0.78rem">${matCost > 0 ? `<span>📦 Materials: <strong style="color:var(--amber-dark)">${fmtMoney(matCost)}</strong></span>` : ''}${polishMatCost > 0 ? `<span>🎨 Polish Mat.: <strong style="color:var(--purple)">${fmtMoney(polishMatCost)}</strong></span>` : ''}${ohCost > 0 ? `<span>💡 Overhead: <strong style="color:var(--amber-dark)">${fmtMoney(ohCost)}</strong></span>` : ''}<span>✅ <strong>Total/piece: ${fmtMoney(total)}</strong></span></div>`;
   else el.innerHTML = '';
 }
 function tplDelOverhead(i) { _tplOverheadRows.splice(i, 1); renderTplOverheadRows(); }
@@ -1244,8 +1247,9 @@ function renderTemplates() {
   const mats = DB.all('materials');
   grid.innerHTML = `<div class="template-grid">${filtered.map(t => {
     const matCost = (t.materials || []).reduce((s, r) => { const m = mats.find(m => m.name === r.mat); return s + parseFloat(r.qty || 0) * parseFloat(m?.unitCost || 0); }, 0);
+    const polishMatCost = (t.polishMaterials || []).reduce((s, r) => { const m = mats.find(m => m.name === r.mat); return s + parseFloat(r.qty || 0) * parseFloat(m?.unitCost || 0); }, 0);
     const ohCost = (t.overheads || []).reduce((s, r) => s + parseFloat(r.amount || 0), 0);
-    const totalCost = matCost + ohCost;
+    const totalCost = matCost + polishMatCost + ohCost;
     return `<div class="template-card">
       <div class="template-card-hdr"><div><div class="template-name">${t.name}</div>${t.desc ? `<div style="font-size:0.72rem;color:var(--text-tertiary);margin-top:0.1rem">${t.desc}</div>` : ''}</div><div class="acts"><button class="act-btn" onclick="openTemplateModal('${t.id}')">✏️</button><button class="act-btn danger" onclick="deleteTemplate('${t.id}')">🗑</button></div></div>
       <div class="template-body">
@@ -2719,4 +2723,24 @@ function createModals() {
   </div>
   `;
   document.querySelectorAll('.modal-backdrop').forEach(el => el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); }));
+
+  document.getElementById('tpl-add-polish-row')?.addEventListener('click', () => {
+    _tplPolishMatRows.push({ mat: '', qty: 0, unit: '' });
+    renderTplPolishMatRows();
+  });
+  document.getElementById('tpl-add-row')?.addEventListener('click', () => {
+    _tplMatRows.push({ mat: '', qty: 0, unit: '' });
+    renderTplMatRows();
+  });
+  document.getElementById('tpl-add-overhead')?.addEventListener('click', () => {
+    _tplOverheadRows.push({ label: '', amount: 0 });
+    renderTplOverheadRows();
+  });
+  document.getElementById('tpl-save')?.addEventListener('click', saveTemplate);
+  document.getElementById('mat-save')?.addEventListener('click', saveMat);
+  document.getElementById('worker-save')?.addEventListener('click', saveWorker);
+  document.getElementById('fi-add-row')?.addEventListener('click', () => { _issueRows.push({ mat: '', qty: 0, unit: '' }); renderIssueRows(); });
+  document.getElementById('fi-save')?.addEventListener('click', saveIssuance);
+  document.getElementById('fp-save')?.addEventListener('click', saveProduction);
+  document.getElementById('pj-add-mat-row')?.addEventListener('click', () => { _polishMatRows.push({ mat: '', qty: 0, unit: '', maxQty: 0 }); _renderPolishMatRows(); });
 }
