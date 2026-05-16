@@ -1304,7 +1304,12 @@ function openProductionModal(preWid = null) {
   const addSwBtn = document.getElementById('fp-add-sub-worker');
   const asCl = addSwBtn.cloneNode(true); addSwBtn.parentNode.replaceChild(asCl, addSwBtn);
   document.getElementById('fp-add-sub-worker').addEventListener('click', () => _addSubWorkerRow());
-
+  const addRowBtn = document.getElementById('fp-add-row');
+  const arCl = addRowBtn.cloneNode(true); addRowBtn.parentNode.replaceChild(arCl, addRowBtn);
+  document.getElementById('fp-add-row').addEventListener('click', () => {
+    _prodMatRows.push({ mat: '', qty: 0, unit: '', maxQty: 0 });
+    renderProdMatRows();
+  });
   openModal('modal-production');
   setTimeout(() => document.getElementById('fp-product')?.focus(), 100);
 }
@@ -1430,21 +1435,45 @@ function _renderOverheadPreview() {
 }
 function renderProdMatRows() {
   const wrap = document.getElementById('fp-mat-rows'); if (!wrap) return;
-  if (!_prodMatRows.length) { wrap.innerHTML = `<div style="text-align:center;padding:.7rem;border:1px dashed var(--border);border-radius:8px;font-size:0.78rem;color:var(--text-light)">Select a worker first, or click "+ Add Row"</div>`; const costEl = document.getElementById('fp-mat-cost'); if (costEl) costEl.innerHTML = ''; return; }
+  if (!_prodMatRows.length) {
+    wrap.innerHTML = `<div style="text-align:center;padding:.7rem;border:1px dashed var(--border);border-radius:8px;font-size:0.78rem;color:var(--text-light)">Select a worker first, or click "+ Add Row"</div>`;
+    const costEl = document.getElementById('fp-mat-cost'); if (costEl) costEl.innerHTML = ''; return;
+  }
   wrap.innerHTML = _prodMatRows.map((r, i) => {
     const overuse = r.mat && parseFloat(r.qty || 0) > parseFloat(r.maxQty || 0), border = overuse ? 'border-color:var(--danger)' : '';
     return `<div style="display:grid;grid-template-columns:1fr 90px 90px 30px;gap:0.4rem;align-items:center;margin-bottom:0.4rem">
-      <input class="finput" id="fp-mat-${i}" value="${r.mat || ''}" placeholder="Material" style="font-size:0.82rem"/>
+      <div class="combo-wrap"><input class="finput" id="fp-mat-${i}" value="${r.mat || ''}" placeholder="Material" autocomplete="off" style="font-size:0.82rem"/><div class="combo-drop" id="fp-mat-drop-${i}"></div></div>
       <span style="text-align:center;font-family:var(--font-mono);font-size:0.7rem;color:${overuse ? 'var(--danger)' : 'var(--text-tertiary)'}">max ${fmtNum(r.maxQty || 0)} ${r.unit}</span>
       <input class="finput" id="fp-qty-${i}" type="number" min="0" step="0.01" value="${r.qty || ''}" placeholder="0" style="${border}"/>
       <button class="row-del" onclick="prodDelRow(${i})">×</button>
     </div>${overuse ? `<div style="font-size:0.68rem;color:var(--danger);margin-bottom:0.3rem">⚠ Only holds ${fmtNum(r.maxQty || 0)} ${r.unit}</div>` : ''}`;
   }).join('');
   _prodMatRows.forEach((_, i) => {
-    document.getElementById(`fp-mat-${i}`)?.addEventListener('input', e => { _prodMatRows[i].mat = e.target.value; renderProdMatRows(); });
-    document.getElementById(`fp-qty-${i}`)?.addEventListener('input', e => { _prodMatRows[i].qty = parseFloat(e.target.value) || 0; renderProdMatRows(); });
+    const mats = DB.all('materials');
+    buildCombo(`fp-mat-${i}`, `fp-mat-drop-${i}`, mats.map(m => m.name), val => {
+      _prodMatRows[i].mat = val;
+      const m = mats.find(m => m.name === val);
+      if (m) _prodMatRows[i].unit = m.unit || '';
+      _updateProdMatCost();
+    });
+    document.getElementById(`fp-mat-${i}`)?.addEventListener('input', e => {
+      _prodMatRows[i].mat = e.target.value;
+      _updateProdMatCost();
+    });
+    document.getElementById(`fp-qty-${i}`)?.addEventListener('input', e => {
+      _prodMatRows[i].qty = parseFloat(e.target.value) || 0;
+      _updateProdMatCost();
+    });
   });
-  const matCost = _prodMatRows.reduce((s, r) => { if (!r.mat || !r.qty) return s; const m = DB.all('materials').find(m => m.name === r.mat); return s + parseFloat(r.qty || 0) * parseFloat(m?.unitCost || 0); }, 0);
+  _updateProdMatCost();
+}
+
+function _updateProdMatCost() {
+  const matCost = _prodMatRows.reduce((s, r) => {
+    if (!r.mat || !r.qty) return s;
+    const m = DB.all('materials').find(m => m.name === r.mat);
+    return s + parseFloat(r.qty || 0) * parseFloat(m?.unitCost || 0);
+  }, 0);
   const costEl = document.getElementById('fp-mat-cost');
   if (costEl && matCost > 0) costEl.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0.75rem;background:var(--amber-pale);border-radius:8px;font-size:0.8rem"><span style="color:var(--text-tertiary)">Raw material cost per piece</span><strong style="font-family:var(--font-mono);color:var(--amber-dark)">${fmtMoney(matCost)}</strong></div>`;
   else if (costEl) costEl.innerHTML = '';
