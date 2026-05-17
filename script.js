@@ -2242,30 +2242,59 @@ function renderFinished() {
   const readyToSell = fin.filter(f => f.polishStatus === 'done' && !f.sold).length;
   const statsEl = document.getElementById('fg-stats');
   if (statsEl) statsEl.innerHTML = `
-        < div class="stat-card" ><span class="sc-ico">✅</span><div class="sc-lbl">Total Produced</div><div class="sc-val">${fin.length}</div></div >
+    <div class="stat-card"><span class="sc-ico">✅</span><div class="sc-lbl">Total Produced</div><div class="sc-val">${fin.length}</div></div>
     <div class="stat-card" style="border-color:${awaitPolish ? 'var(--amber-light)' : 'var(--border)'}"><span class="sc-ico">🎨</span><div class="sc-lbl">Awaiting Polish</div><div class="sc-val" style="color:${awaitPolish ? 'var(--amber)' : 'var(--text-primary)'}">${awaitPolish}</div></div>
     <div class="stat-card" style="border-color:var(--info-light)"><span class="sc-ico">✨</span><div class="sc-lbl">Ready to Sell</div><div class="sc-val" style="color:var(--info)">${readyToSell}</div></div>
     <div class="stat-card"><span class="sc-ico">🧾</span><div class="sc-lbl">Sold</div><div class="sc-val" style="color:var(--success)">${fin.filter(f => f.sold).length}</div></div>
     <div class="stat-card"><span class="sc-ico">💳</span><div class="sc-lbl">Total Wages</div><div class="sc-val" style="font-size:1.2rem">${fmtMoney(fin.reduce((s, f) => s + parseFloat(f.totalWage || 0), 0))}</div></div>
     <div class="stat-card" style="border-color:var(--amber-light)"><span class="sc-ico">📦</span><div class="sc-lbl">Raw Mat. Cost</div><div class="sc-val" style="font-size:1.2rem;color:var(--amber-dark)">${fmtMoney(fin.reduce((s, f) => s + parseFloat(f.matCostPerPiece || 0), 0))}</div></div>`;
+
   const pmap = {};
-  fin.forEach(f => { const k = f.product; if (!pmap[k]) pmap[k] = { name: k, total: 0, inStock: 0, sold: 0, matCost: 0, wageTotal: 0, awaitPolish: 0, readyToSell: 0 }; pmap[k].total++; f.sold ? pmap[k].sold++ : f.polishStatus === 'done' ? pmap[k].readyToSell++ : pmap[k].awaitPolish++; pmap[k].matCost += parseFloat(f.matCostPerPiece || 0); pmap[k].wageTotal += parseFloat(f.totalWage || 0); });
+  fin.forEach(f => {
+    const k = f.product;
+    if (!pmap[k]) pmap[k] = { name: k, total: 0, inStock: 0, sold: 0, matCost: 0, wageTotal: 0, awaitPolish: 0, readyToSell: 0 };
+    pmap[k].total++;
+    f.sold ? pmap[k].sold++ : f.polishStatus === 'done' ? pmap[k].readyToSell++ : pmap[k].awaitPolish++;
+    pmap[k].matCost += parseFloat(f.matCostPerPiece || 0);
+    pmap[k].wageTotal += parseFloat(f.totalWage || 0);
+  });
   const summaryRows = Object.values(pmap).sort((a, b) => b.total - a.total);
   const list = document.getElementById('fg-list'); if (!list) return;
-  list.innerHTML = (summaryRows.length ? `< div class="card" style = "margin-bottom:1.2rem" ><div class="card-hdr"><span class="card-title">📊 Product Summary</span></div><div class="card-body" style="padding:0"><table class="data-table"><thead><tr><th>Product</th><th style="text-align:center">Total</th><th style="text-align:center">Await Polish</th><th style="text-align:center">Ready</th><th style="text-align:center">Sold</th><th style="text-align:right">Mat. Cost</th></tr></thead><tbody>${summaryRows.map(p => `<tr><td class="td-name">${p.name}</td><td class="td-mono" style="text-align:center"><strong>${p.total}</strong></td><td class="td-mono" style="text-align:center;color:var(--amber)">${p.awaitPolish}</td><td class="td-mono" style="text-align:center;color:var(--info)">${p.readyToSell}</td><td class="td-mono" style="text-align:center;color:var(--success)">${p.sold}</td><td class="td-mono" style="text-align:right;color:var(--amber-dark)">${fmtMoney(p.matCost)}</td></tr>`).join('')}</tbody></table></div></div > ` : '') + (fl.length ? fl.map(f => {
+
+  list.innerHTML = (summaryRows.length ? `
+    <div class="card" style="margin-bottom:1.2rem">
+      <div class="card-hdr"><span class="card-title">📊 Product Summary</span></div>
+      <div class="card-body" style="padding:0">
+        <table class="data-table">
+          <thead><tr><th>Product</th><th style="text-align:center">Total</th><th style="text-align:center">Await Polish</th><th style="text-align:center">Ready</th><th style="text-align:center">Sold</th><th style="text-align:right">Mat. Cost</th></tr></thead>
+          <tbody>${summaryRows.map(p => `<tr>
+            <td class="td-name">${p.name}</td>
+            <td class="td-mono" style="text-align:center"><strong>${p.total}</strong></td>
+            <td class="td-mono" style="text-align:center;color:var(--amber)">${p.awaitPolish}</td>
+            <td class="td-mono" style="text-align:center;color:var(--info)">${p.readyToSell}</td>
+            <td class="td-mono" style="text-align:center;color:var(--success)">${p.sold}</td>
+            <td class="td-mono" style="text-align:right;color:var(--amber-dark)">${fmtMoney(p.matCost)}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>` : '') +
+  (fl.length ? fl.map(f => {
     const matCost = parseFloat(f.matCostPerPiece || 0), ohCost = parseFloat(f.ohCostPerPiece || 0);
     const mainW = parseFloat(f.mainWage || f.totalWage || 0), subW = parseFloat(f.subWorkersWage || 0);
     const polishW = parseFloat(f.polishWage || 0);
-    const subWorkers = f.subWorkers || [];
     const isAwaitingPolish = f.polishStatus === 'pending' && !f.sold;
     const isReadyToSell = f.polishStatus === 'done' && !f.sold;
-    return `< div class="fg-card" style = "${isAwaitingPolish ? 'border-color:var(--amber)' : ''}${isReadyToSell ? 'border-color:var(--success-light)' : ''}" >
+    return `<div class="fg-card" style="${isAwaitingPolish ? 'border-color:var(--amber)' : ''}${isReadyToSell ? 'border-color:var(--success-light)' : ''}">
       <div class="fg-icon">${isAwaitingPolish ? '🎨' : isReadyToSell ? '✨' : '🪑'}</div>
       <div class="fg-body">
         <div class="fg-product">${f.product}</div>
         <div style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-tertiary);margin-bottom:0.25rem">📟 ${f.serialNumber || '—'}</div>
-        <div class="fg-meta"><span>👷 ${f.workerName}</span><span>📅 ${fmtDate(f.date)}</span>
-          ${f.sold ? `<span class="badge badge-success" style="font-size:0.65rem">🧾 Sold</span>` : isReadyToSell ? `<span class="badge badge-success" style="font-size:0.65rem;background:var(--info-light);color:var(--info)">✨ Ready to Sell</span>` : `<span class="badge badge-amber" style="font-size:0.65rem">🎨 Awaiting Polish</span>`}
+        <div class="fg-meta">
+          <span>👷 ${f.workerName}</span>
+          <span>📅 ${fmtDate(f.date)}</span>
+          ${f.sold ? `<span class="badge badge-success" style="font-size:0.65rem">🧾 Sold</span>`
+            : isReadyToSell ? `<span class="badge badge-success" style="font-size:0.65rem;background:var(--info-light);color:var(--info)">✨ Ready to Sell</span>`
+            : `<span class="badge badge-amber" style="font-size:0.65rem">🎨 Awaiting Polish</span>`}
         </div>
         <div style="display:flex;gap:0.5rem 1rem;margin-top:0.3rem;font-size:0.75rem;flex-wrap:wrap">
           <span>💳 Prod: <strong>${fmtMoney(mainW)}</strong></span>
@@ -2275,16 +2304,16 @@ function renderFinished() {
           ${ohCost > 0 ? `<span>💡 OH: <strong style="color:var(--info)">${fmtMoney(ohCost)}</strong></span>` : ''}
         </div>
         ${isAwaitingPolish ? `<div style="margin-top:0.4rem"><button class="btn btn-sm" style="background:var(--amber);color:#fff;font-size:0.73rem" onclick="openPolishModal(null)">🎨 Assign Polish</button></div>` : ''}
-        ${(f.materialsUsed || []).length ? `<div style="font-size:0.72rem;color:var(--text-light);margin-top:0.2rem">${f.materialsUsed.map(m => `${fmtNum(m.qty)} ${m.unit} ${m.mat}`).join(' · ')}</div>` : ''}</div>
+        ${(f.materialsUsed || []).length ? `<div style="font-size:0.72rem;color:var(--text-light);margin-top:0.2rem">${f.materialsUsed.map(m => `${fmtNum(m.qty)} ${m.unit} ${m.mat}`).join(' · ')}</div>` : ''}
+      </div>
       <div class="acts" style="flex-direction:column;gap:0.4rem">
         ${!f.sold && isReadyToSell ? `<button class="btn btn-primary btn-sm" onclick="openSalesModal('${f.id}')">🧾 Sell</button>` : ''}
         ${!f.sold && isAwaitingPolish ? `<button class="btn btn-ghost btn-sm" style="font-size:0.7rem;color:var(--text-tertiary)" disabled title="Polish first">🔒 Sell</button>` : ''}
         <button class="act-btn danger" onclick="deleteFG('${f.id}')">🗑</button>
       </div>
-    </div > `;
-  }).join('') : `< div class="table-card" > <div class="t-empty"><span class="t-empty-ico">✅</span>${fin.length ? 'No results' : 'No finished goods yet'}</div></div > `);
-}
-function deleteFG(id) { if (!confirm('Delete this record?')) return; DB.delete('finished', id); renderFinished(); updateCounts(); toast('Deleted', 'warning'); }
+    </div>`;
+  }).join('') : `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">✅</span>${fin.length ? 'No results' : 'No finished goods yet'}</div></div>`);
+}function deleteFG(id) { if (!confirm('Delete this record?')) return; DB.delete('finished', id); renderFinished(); updateCounts(); toast('Deleted', 'warning'); }
 
 /* ═══════════ SALES ═══════════ */
 let _cartItems = [], _editSaleId = null;
