@@ -1698,17 +1698,18 @@ function renderProductions() {
     const subWageTotal = parseFloat(p.subWageTotal || 0) || subWorkers.reduce((s, sw) => s + parseFloat(sw.totalWage || 0), 0);
     const fgItems = DB.where('finished', f => f.productionId === p.id);
     const polishMatCostPerPiece = fgItems.length
-      ? fgItems.reduce((sum, fg) => {
-        if (fg.polishStatus !== 'done') return sum;
-        const pj = fg.polishJobId ? DB.find('polishJobs', fg.polishJobId) : null;
-        if (!pj) return sum;
-        const pjMatCost = (pj.materialsUsed || []).reduce((s, u) => {
-          const m = DB.all('materials').find(m => m.name === u.mat);
-          return s + parseFloat(u.qty || 0) * parseFloat(m?.unitCost || 0);
+      ? (() => {
+        const pjIds = [...new Set(fgItems.filter(f => f.polishStatus === 'done' && f.polishJobId).map(f => f.polishJobId))];
+        const total = pjIds.reduce((sum, pjId) => {
+          const pj = DB.find('polishJobs', pjId);
+          if (!pj) return sum;
+          return sum + (pj.materialsUsed || []).reduce((s, u) => {
+            const m = DB.all('materials').find(m => m.name === u.mat);
+            return s + parseFloat(u.qty || 0) * parseFloat(m?.unitCost || 0);
+          }, 0);
         }, 0);
-        const pjItemCount = (pj.items || []).length || 1;
-        return sum + pjMatCost / pjItemCount;
-      }, 0) / pieces
+        return total / pieces;
+      })()
       : 0;
     const polishWagePerPiece = fgItems.length
       ? fgItems.reduce((sum, fg) => {
