@@ -1696,11 +1696,40 @@ function renderProductions() {
     const mainWagePer = parseFloat(p.wagePerPiece || 0) || (mainWage / pieces);
     const subWorkers = p.subWorkers || [];
     const subWageTotal = parseFloat(p.subWageTotal || 0) || subWorkers.reduce((s, sw) => s + parseFloat(sw.totalWage || 0), 0);
-    const grandTotalWages = parseFloat(p.totalWage || 0);
-    const grandCostPc = matCost + ohCost + (grandTotalWages / pieces);
-    const ohTitle = (p.overheadsSnapshot || []).map(o => `${o.label}: ${fmtMoney(o.amount)}`).join('\n');
-    // Polish status for this production
     const fgItems = DB.where('finished', f => f.productionId === p.id);
+    const polishMatCostPerPiece = fgItems.length
+      ? fgItems.reduce((sum, fg) => {
+        if (fg.polishStatus !== 'done') return sum;
+        const pj = fg.polishJobId ? DB.find('polishJobs', fg.polishJobId) : null;
+        if (!pj) return sum;
+        const pjMatCost = (pj.materialsUsed || []).reduce((s, u) => {
+          const m = DB.all('materials').find(m => m.name === u.mat);
+          return s + parseFloat(u.qty || 0) * parseFloat(m?.unitCost || 0);
+        }, 0);
+        const pjItemCount = (pj.items || []).length || 1;
+        return sum + pjMatCost / pjItemCount;
+      }, 0) / pieces
+      : 0;
+    const polishWagePerPiece = fgItems.length
+      ? fgItems.reduce((sum, fg) => {
+        if (fg.polishStatus !== 'done') return sum;
+        return sum + parseFloat(fg.polishWage || 0);
+      }, 0) / pieces
+      : 0;
+    const polishSubWagePerPiece = fgItems.length
+      ? fgItems.reduce((sum, fg) => {
+        if (fg.polishStatus !== 'done') return sum;
+        const pj = fg.polishJobId ? DB.find('polishJobs', fg.polishJobId) : null;
+        if (!pj) return sum;
+        const subWage = parseFloat(pj.subWageTotal || 0) ||
+          (pj.subWorkers || []).reduce((s, sw) => s + parseFloat(sw.totalWage || 0), 0);
+        const pjItemCount = (pj.items || []).length || 1;
+        return sum + subWage / pjItemCount;
+      }, 0) / (fgItems.filter(fg => fg.polishStatus === 'done').length || 1)
+      : 0;
+    const grandTotalWages = parseFloat(p.totalWage || 0) + (polishWagePerPiece + polishSubWagePerPiece) * pieces;
+    const totalMatCostPerPiece = matCost + ohCost + polishMatCostPerPiece;
+    const grandCostPc = (grandTotalWages / pieces) + totalMatCostPerPiece; const ohTitle = (p.overheadsSnapshot || []).map(o => `${o.label}: ${fmtMoney(o.amount)}`).join('\n');
     const pendingPolish = fgItems.filter(f => f.polishStatus === 'pending').length;
     const donePolish = fgItems.filter(f => f.polishStatus === 'done').length;
 
@@ -1737,9 +1766,8 @@ function renderProductions() {
               ${wageChips}
               <div style="display:flex;flex-wrap:wrap;gap:0.5rem 1.2rem;padding-top:0.4rem;border-top:1px solid var(--border-light)">
                 <div class="pcc-item"><span class="pcc-label">Total wages / pc</span><span class="pcc-value pcc-amber">${fmtMoney(pieces > 0 ? grandTotalWages / pieces : 0)}</span></div>
-                ${matCost > 0 ? `<div class="pcc-item"><span class="pcc-label">Mat. cost / pc</span><span class="pcc-value pcc-blue">${fmtMoney(matCost)}</span></div>` : ''}
-                ${grandCostPc > 0 ? `<div class="pcc-item pcc-total"><span class="pcc-label">Grand cost / pc</span><span class="pcc-value pcc-total-val">${fmtMoney(grandCostPc)}</span></div>` : ''}
-              </div>
+                ${totalMatCostPerPiece > 0 ? `<div class="pcc-item"><span class="pcc-label">Mat. cost / pc</span><span class="pcc-value pcc-blue">${fmtMoney(totalMatCostPerPiece)}</span></div>` : ''}
+                ${grandCostPc > 0 ? `<div class="pcc-item pcc-total"><span class="pcc-label">Grand cost / pc</span><span class="pcc-value pcc-total-val">${fmtMoney(grandCostPc)}</span></div>` : ''}         </div>
             </div>
             ${(p.materialsUsed || []).length ? `<div class="prod-mats-used"><span class="pmu-label">Materials used (per pc):</span>${p.materialsUsed.map(m => `<span class="pmu-tag">${fmtNum(m.qty)} ${m.unit} ${m.mat}</span>`).join('')}</div>` : ''}
             ${p.notes ? `<div class="prod-notes">💬 ${p.notes}</div>` : ''}
