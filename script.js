@@ -1734,11 +1734,33 @@ function renderProductions() {
     const donePolish = fgItems.filter(f => f.polishStatus === 'done').length;
 
     const wageChips = `
-          <div class="wage-breakdown">
-            <span class="wb-chip">👷 ${p.workerName}: ${fmtMoney(mainWage)}</span>
-            ${subWorkers.map(sw => `<span class="wb-chip wb-chip-sub">🔧 ${sw.workerName}: ${fmtMoney(sw.totalWage || 0)}</span>`).join('')}
-            ${subWorkers.length > 0 ? `<span class="wb-chip wb-chip-total">Σ ${fmtMoney(grandTotalWages)}</span>` : ''}
-          </div>`;
+  <div style="display:flex;flex-direction:column;gap:0.5rem;padding:0.65rem 0.85rem;background:var(--bg-secondary);border-radius:9px;border:1px solid var(--border-light)">
+    <div style="display:flex;flex-direction:column;gap:0.25rem">
+      <div style="font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-light)">🪑 Carpentry</div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.3rem">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1.5rem;padding:0.3rem 0.7rem;background:var(--amber-pale);border:1px solid var(--amber-light);border-radius:7px;font-size:0.76rem;min-width:160px">
+          <span style="font-weight:600;color:var(--text-primary)">👷 ${p.workerName}</span>
+          <span style="font-family:var(--font-mono);color:var(--amber-dark);font-weight:700">${fmtMoney(mainWagePer)}/pc</span>
+        </div>
+        ${subWorkers.map(sw => `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1.5rem;padding:0.3rem 0.7rem;background:var(--amber-pale);border:1px solid var(--amber-light);border-radius:7px;font-size:0.76rem;min-width:160px">
+          <span style="font-weight:600;color:var(--text-primary)">🔧 ${sw.workerName}</span>
+          <span style="font-family:var(--font-mono);color:var(--amber-dark);font-weight:700">${fmtMoney(parseFloat(sw.wagePerPiece || 0))}/pc</span>
+        </div>`).join('')}
+      </div>
+    </div>
+    ${polishWagePerPiece > 0 ? `
+    <div style="display:flex;flex-direction:column;gap:0.25rem;padding-top:0.4rem;border-top:1px dashed var(--border)">
+      <div style="font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-light)">🎨 Polish</div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.3rem">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1.5rem;padding:0.3rem 0.7rem;background:var(--purple-light);border:1px solid #ddd6fe;border-radius:7px;font-size:0.76rem;min-width:160px">
+          <span style="font-weight:600;color:var(--text-primary)">👷 ${fgItems.find(f => f.polishWorkerName)?.polishWorkerName || 'Polish worker'}</span>
+          <span style="font-family:var(--font-mono);color:var(--purple);font-weight:700">${fmtMoney(polishWagePerPiece)}/pc</span>
+        </div>
+        ${(() => { const pj = fgItems.find(f => f.polishJobId) ? DB.find('polishJobs', fgItems.find(f => f.polishJobId).polishJobId) : null; return (pj?.subWorkers || []).map(sw => `<div style="display:flex;align-items:center;justify-content:space-between;gap:1.5rem;padding:0.3rem 0.7rem;background:var(--purple-light);border:1px solid #ddd6fe;border-radius:7px;font-size:0.76rem;min-width:160px"><span style="font-weight:600;color:var(--text-primary)">🔧 ${sw.workerName}</span><span style="font-family:var(--font-mono);color:var(--purple);font-weight:700">${fmtMoney(parseFloat(sw.wagePerPiece || 0))}/pc</span></div>`).join(''); })()}
+      </div>
+    </div>` : ''}
+  </div>`;
 
     return `<div class="prod-card">
           <div class="prod-card-left"><div class="prod-card-icon">🏭</div></div>
@@ -2172,8 +2194,9 @@ function renderPolish() {
       const mainW = parseFloat(pj.mainWage || 0);
       const subW = parseFloat(pj.subWageTotal || 0) || subWorkers.reduce((s, sw) => s + parseFloat(sw.totalWage || 0), 0);
       const totalW = parseFloat(pj.totalWage || mainW + subW);
-      const matCost = (pj.materialsUsed || []).reduce((s, u) => { const m = DB.all('materials').find(m => m.name === u.mat); return s + parseFloat(u.qty || 0) * parseFloat(m?.unitCost || 0); }, 0);
-      return `<div style="padding:0.85rem 1rem;border-bottom:1px solid var(--border-light)">
+      const pjItemCount = (pj.items || []).length || 1;
+      const matCostPerPc = (pj.materialsUsed || []).reduce((s, u) => { const m = DB.all('materials').find(m => m.name === u.mat); return s + parseFloat(u.qty || 0) * parseFloat(m?.unitCost || 0); }, 0);
+      const matCost = matCostPerPc * pjItemCount; return `<div style="padding:0.85rem 1rem;border-bottom:1px solid var(--border-light)">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:0.5rem;flex-wrap:wrap">
           <div>
             <div style="font-weight:700;font-size:0.9rem;color:var(--text-primary)">${pj.productName || 'Polish Job'}</div>
@@ -2186,8 +2209,7 @@ function renderPolish() {
           </div>
           <div style="text-align:right;flex-shrink:0">
             <div style="font-weight:700;color:var(--amber-dark);font-family:var(--font-mono)">${fmtMoney(totalW)}</div>
-            <div style="font-size:0.68rem;color:var(--text-tertiary)">wages${matCost > 0 ? ' + ' + fmtMoney(matCost) + ' mat.' : ''}</div>
-            <div style="display:flex;gap:0.3rem;margin-top:0.4rem;justify-content:flex-end">
+            <div style="font-size:0.68rem;color:var(--text-tertiary)">wages${matCost > 0 ? ' + ' + fmtMoney(matCost) + ' mat. (' + fmtMoney(matCostPerPc) + '/pc × ' + pjItemCount + ')' : ''}</div><div style="display:flex;gap:0.3rem;margin-top:0.4rem;justify-content:flex-end">
               <button class="act-btn danger" onclick="deletePolishJob('${pj.id}')">🗑</button>
             </div>
           </div>
