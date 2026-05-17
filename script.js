@@ -1631,10 +1631,33 @@ function deleteProduction(prodId) {
   });
 
   serials.forEach(sn => { const fg = DB.all('finished').find(f => f.serialNumber === sn && f.productionId === prodId); if (fg) DB.delete('finished', fg.id); });
-  // Also delete any polish jobs linked
+  // Also delete any polish jobs linked — return materials to polish worker
   const polishJobs = DB.where('polishJobs', p => (p.items || []).some(it => serials.includes(it.serialNumber)));
-  polishJobs.forEach(pj => DB.delete('polishJobs', pj.id));
-
+  polishJobs.forEach(pj => {
+    const polishWorker = pj.workerId ? DB.find('workers', pj.workerId) : null;
+    if (polishWorker) {
+      const holdings = [...(polishWorker.holdings || [])];
+      (pj.materialsUsed || []).forEach(u => {
+        const h = holdings.find(h => h.mat === u.mat);
+        if (h) h.qty = parseFloat(h.qty || 0) + parseFloat(u.qty || 0);
+        else holdings.push({ mat: u.mat, qty: parseFloat(u.qty || 0), unit: u.unit || '' });
+      });
+      DB.update('workers', polishWorker.id, {
+        holdings,
+        totalJobs: Math.max(0, (polishWorker.totalJobs || 0) - (pj.items || []).length),
+        totalEarned: Math.max(0, (polishWorker.totalEarned || 0) - parseFloat(pj.mainWage || 0))
+      });
+    }
+    (pj.subWorkers || []).forEach(sw => {
+      if (!sw.workerId) return;
+      const sw_w = DB.find('workers', sw.workerId); if (!sw_w) return;
+      DB.update('workers', sw.workerId, {
+        totalJobs: Math.max(0, (sw_w.totalJobs || 0) - (pj.items || []).length),
+        totalEarned: Math.max(0, (sw_w.totalEarned || 0) - parseFloat(sw.totalWage || 0))
+      });
+    });
+    DB.delete('polishJobs', pj.id);
+  });
   DB.delete('productions', prodId);
   renderProductions(); renderFinished(); renderWorkers(); renderPolish(); updateCounts();
   if (document.getElementById('page-worker-profile')?.classList.contains('active')) renderWorkerProfile();
@@ -1713,12 +1736,9 @@ function renderProductions() {
               <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-light)">Wage Breakdown</div>
               ${wageChips}
               <div style="display:flex;flex-wrap:wrap;gap:0.5rem 1.2rem;padding-top:0.4rem;border-top:1px solid var(--border-light)">
-                ${mainWagePer > 0 ? `<div class="pcc-item"><span class="pcc-label">Main wage / pc</span><span class="pcc-value pcc-amber">${fmtMoney(mainWagePer)}</span></div>` : ''}
-                ${subWorkers.length > 0 ? `<div class="pcc-item"><span class="pcc-label">Sub wages total</span><span class="pcc-value" style="color:var(--info)">${fmtMoney(subWageTotal)}</span></div>` : ''}
+                <div class="pcc-item"><span class="pcc-label">Total wages / pc</span><span class="pcc-value pcc-amber">${fmtMoney(pieces > 0 ? grandTotalWages / pieces : 0)}</span></div>
                 ${matCost > 0 ? `<div class="pcc-item"><span class="pcc-label">Mat. cost / pc</span><span class="pcc-value pcc-blue">${fmtMoney(matCost)}</span></div>` : ''}
-                ${ohCost > 0 ? `<div class="pcc-item" title="${ohTitle}" style="cursor:help"><span class="pcc-label">Overhead / pc ℹ</span><span class="pcc-value pcc-purple">${fmtMoney(ohCost)}</span></div>` : ''}
                 ${grandCostPc > 0 ? `<div class="pcc-item pcc-total"><span class="pcc-label">Grand cost / pc</span><span class="pcc-value pcc-total-val">${fmtMoney(grandCostPc)}</span></div>` : ''}
-                <div class="pcc-item pcc-total-wages"><span class="pcc-label">All wages</span><span class="pcc-value pcc-amber">${fmtMoney(grandTotalWages)}</span></div>
               </div>
             </div>
             ${(p.materialsUsed || []).length ? `<div class="prod-mats-used"><span class="pmu-label">Materials used (per pc):</span>${p.materialsUsed.map(m => `<span class="pmu-tag">${fmtNum(m.qty)} ${m.unit} ${m.mat}</span>`).join('')}</div>` : ''}
@@ -2032,25 +2052,50 @@ function savePolishJob() {
 function deletePolishJob(id) {
   const pj = DB.find('polishJobs', id); if (!pj) { toast('Not found', 'danger'); return; }
   if (!confirm('Delete polish job? Items will be set back to "awaiting polish".')) return;
+  // Check if any items already sold
+  const hasSold = (pj.items || []).some(it => {
+    const fg = it.fgId ? DB.find('finished', it.fgId) : null;
+    return fg && fg.sold;
+  });
+  if (hasSold) { toast('Cannot delete — some items already sold', 'danger'); return; }
   // Revert finished goods
   (pj.items || []).forEach(it => {
-    if (it.fgId) {
-      const fg = DB.find('finished', it.fgId);
-      if (fg && fg.sold) { toast('Cannot delete — some items already sold', 'danger'); return; }
-      DB.update('finished', it.fgId, { polishStatus: 'pending', polishJobId: null, polishWorkerName: null, polishWage: null });
-    }
+    if (it.fgId) DB.update('finished', it.fgId, { polishStatus: 'pending', polishJobId: null, polishWorkerName: null, polishWage: null });
   });
-  // Revert worker earnings
+  // Return polish materials to polish worker holdings
   const worker = pj.workerId ? DB.find('workers', pj.workerId) : null;
-  if (worker) {
+  if (worker && (pj.materialsUsed || []).length) {
+    const holdings = [...(worker.holdings || [])];
+    (pj.materialsUsed || []).forEach(u => {
+      if (!u.mat || !parseFloat(u.qty || 0)) return;
+      const h = holdings.find(h => h.mat === u.mat);
+      if (h) h.qty = parseFloat(h.qty || 0) + parseFloat(u.qty || 0);
+      else holdings.push({ mat: u.mat, qty: parseFloat(u.qty || 0), unit: u.unit || '' });
+    });
+    DB.update('workers', worker.id, {
+      holdings,
+      totalJobs: Math.max(0, (worker.totalJobs || 0) - (pj.items || []).length),
+      totalEarned: Math.max(0, (worker.totalEarned || 0) - parseFloat(pj.mainWage || 0))
+    });
+  } else if (worker) {
     DB.update('workers', worker.id, {
       totalJobs: Math.max(0, (worker.totalJobs || 0) - (pj.items || []).length),
       totalEarned: Math.max(0, (worker.totalEarned || 0) - parseFloat(pj.mainWage || 0))
     });
   }
+  // Revert sub-worker earnings
+  (pj.subWorkers || []).forEach(sw => {
+    if (!sw.workerId) return;
+    const sw_w = DB.find('workers', sw.workerId); if (!sw_w) return;
+    DB.update('workers', sw.workerId, {
+      totalJobs: Math.max(0, (sw_w.totalJobs || 0) - (pj.items || []).length),
+      totalEarned: Math.max(0, (sw_w.totalEarned || 0) - parseFloat(sw.totalWage || 0))
+    });
+  });
   DB.delete('polishJobs', id);
   renderPolish(); renderFinished(); renderWorkers(); updateCounts();
-  toast('Polish job deleted', 'warning');
+  if (document.getElementById('page-worker-profile')?.classList.contains('active')) renderWorkerProfile();
+  toast('Polish job deleted — materials returned to ' + (worker?.name || 'worker'), 'warning');
 }
 
 function renderPolish() {
