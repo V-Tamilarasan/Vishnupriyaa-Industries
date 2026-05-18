@@ -552,7 +552,11 @@ function renderWorkers() {
       <td class="td-name">${w.name}</td>
       <td class="td-mono">${w.phone || '—'}</td>
       <td><span class="badge badge-gray">${w.skill || '—'}</span></td>
-      <td class="td-mono">${w.totalJobs || 0}</td>
+      <td class="td-mono">${DB.where('productions', p => p.workerId === w.id || (p.subWorkers || []).some(sw => sw.workerId === w.id))
+        .reduce((s, p) => s + (p.piecesCount || 1), 0) +
+      DB.where('polishJobs', p => p.workerId === w.id || (p.subWorkers || []).some(sw => sw.workerId === w.id))
+        .reduce((s, pj) => s + ((pj.items || []).length || 1), 0)
+      }</td>
       <td class="td-mono">${fmtMoney(w.totalEarned || 0)}</td>
       <td>${status}</td>
       <td><div class="acts">
@@ -603,8 +607,17 @@ function renderWorkerProfile() {
           <div><div style="font-weight:700;font-size:1.1rem;color:var(--text-primary)">${worker.name}</div><div style="font-size:0.78rem;color:var(--text-tertiary)">${worker.skill || '—'} · ${worker.phone || 'No phone'}</div></div>
         </div>
         <div style="display:flex;gap:0.6rem;flex-wrap:wrap">
-          <div class="stat-card" style="padding:0.6rem 0.9rem;min-width:80px"><div class="sc-lbl">Jobs</div><div class="sc-val">${worker.totalJobs || 0}</div></div>
-          <div class="stat-card" style="padding:0.6rem 0.9rem;min-width:80px"><div class="sc-lbl">Earned</div><div class="sc-val" style="font-size:1rem">${fmtMoney(worker.totalEarned || 0)}</div></div>
+          <div class="stat-card" style="padding:0.6rem 0.9rem;min-width:80px"><div class="sc-lbl">Jobs</div><div class="sc-val">${prods.reduce((s, p) => {
+    const isMain = p.workerId === wid;
+    const isSub = (p.subWorkers || []).some(sw => sw.workerId === wid);
+    return s + (isMain || isSub ? (p.piecesCount || 1) : 0);
+  }, 0) +
+    polishJobs.reduce((s, pj) => {
+      const isMain = pj.workerId === wid;
+      const isSub = (pj.subWorkers || []).some(sw => sw.workerId === wid);
+      return s + (isMain || isSub ? ((pj.items || []).length || 1) : 0);
+    }, 0)
+    }</div></div><div class="stat-card" style="padding:0.6rem 0.9rem;min-width:80px"><div class="sc-lbl">Earned</div><div class="sc-val" style="font-size:1rem">${fmtMoney(worker.totalEarned || 0)}</div></div>
           <div class="stat-card" style="padding:0.6rem 0.9rem;min-width:80px;border-color:var(--amber-light)"><div class="sc-lbl">Holding Value</div><div class="sc-val" style="font-size:1rem;color:var(--amber-dark)">${fmtMoney(totalHoldingValue)}</div></div>
           <div class="stat-card" style="padding:0.6rem 0.9rem;min-width:80px"><div class="sc-lbl">Mat. Used</div><div class="sc-val" style="font-size:1rem;color:var(--amber-dark)">${fmtMoney(totalMatUsedValue)}</div></div>
         </div>
@@ -1698,28 +1711,28 @@ function renderProductions() {
     const subWageTotal = parseFloat(p.subWageTotal || 0) || subWorkers.reduce((s, sw) => s + parseFloat(sw.totalWage || 0), 0);
     const fgItems = DB.where('finished', f => f.productionId === p.id);
     const polishMatCostPerPiece = fgItems.length
-  ? (() => {
-    const doneFgItems = fgItems.filter(f => f.polishStatus === 'done' && f.polishJobId);
-    if (!doneFgItems.length) return 0;
-    // Weighted average: sum(cost_per_piece * pieces_in_job) / total_polished_pieces
-    const pjIds = [...new Set(doneFgItems.map(f => f.polishJobId))];
-    let totalWeightedCost = 0;
-    let totalPieces = 0;
-    pjIds.forEach(pjId => {
-      const pj = DB.find('polishJobs', pjId);
-      if (!pj) return;
-      // Count how many pieces from THIS production batch are in this polish job
-      const piecesInThisJob = doneFgItems.filter(f => f.polishJobId === pjId).length;
-      const matCostForThisJob = (pj.materialsUsed || []).reduce((s, u) => {
-        const m = DB.all('materials').find(m => m.name === u.mat);
-        return s + parseFloat(u.qtyPerPiece || 0) * parseFloat(m?.unitCost || 0);
-      }, 0);
-      totalWeightedCost += matCostForThisJob * piecesInThisJob;
-      totalPieces += piecesInThisJob;
-    });
-    return totalPieces > 0 ? totalWeightedCost / totalPieces : 0;
-  })()
-  : 0;
+      ? (() => {
+        const doneFgItems = fgItems.filter(f => f.polishStatus === 'done' && f.polishJobId);
+        if (!doneFgItems.length) return 0;
+        // Weighted average: sum(cost_per_piece * pieces_in_job) / total_polished_pieces
+        const pjIds = [...new Set(doneFgItems.map(f => f.polishJobId))];
+        let totalWeightedCost = 0;
+        let totalPieces = 0;
+        pjIds.forEach(pjId => {
+          const pj = DB.find('polishJobs', pjId);
+          if (!pj) return;
+          // Count how many pieces from THIS production batch are in this polish job
+          const piecesInThisJob = doneFgItems.filter(f => f.polishJobId === pjId).length;
+          const matCostForThisJob = (pj.materialsUsed || []).reduce((s, u) => {
+            const m = DB.all('materials').find(m => m.name === u.mat);
+            return s + parseFloat(u.qtyPerPiece || 0) * parseFloat(m?.unitCost || 0);
+          }, 0);
+          totalWeightedCost += matCostForThisJob * piecesInThisJob;
+          totalPieces += piecesInThisJob;
+        });
+        return totalPieces > 0 ? totalWeightedCost / totalPieces : 0;
+      })()
+      : 0;
     const donePieces = fgItems.filter(f => f.polishStatus === 'done');
     const polishWagePerPiece = donePieces.length
       ? donePieces.reduce((sum, fg) => sum + parseFloat(fg.polishWage || 0), 0) / donePieces.length
@@ -1735,7 +1748,7 @@ function renderProductions() {
       }, 0) / donePieces.length
       : 0; const grandTotalWages = parseFloat(p.totalWage || 0) + (polishWagePerPiece + polishSubWagePerPiece) * pieces;
     const totalMatCostPerPiece = matCost + ohCost;
-    const grandCostPc = (grandTotalWages / pieces) + totalMatCostPerPiece + polishMatCostPerPiece;const pendingPolish = fgItems.filter(f => f.polishStatus === 'pending').length;
+    const grandCostPc = (grandTotalWages / pieces) + totalMatCostPerPiece + polishMatCostPerPiece; const pendingPolish = fgItems.filter(f => f.polishStatus === 'pending').length;
     const donePolish = fgItems.filter(f => f.polishStatus === 'done').length;
 
     const wageChips = `
