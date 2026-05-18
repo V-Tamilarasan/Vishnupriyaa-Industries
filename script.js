@@ -1699,37 +1699,35 @@ function renderProductions() {
     const fgItems = DB.where('finished', f => f.productionId === p.id);
     const polishMatCostPerPiece = fgItems.length
       ? (() => {
-        const pjIds = [...new Set(fgItems.filter(f => f.polishStatus === 'done' && f.polishJobId).map(f => f.polishJobId))];
+        const doneFgItems = fgItems.filter(f => f.polishStatus === 'done' && f.polishJobId);
+        if (!doneFgItems.length) return 0;
+        const pjIds = [...new Set(doneFgItems.map(f => f.polishJobId))];
         const total = pjIds.reduce((sum, pjId) => {
           const pj = DB.find('polishJobs', pjId);
           if (!pj) return sum;
           return sum + (pj.materialsUsed || []).reduce((s, u) => {
             const m = DB.all('materials').find(m => m.name === u.mat);
-            return s + parseFloat(u.qty || 0) * parseFloat(m?.unitCost || 0);
+            return s + parseFloat(u.qtyPerPiece || 0) * parseFloat(m?.unitCost || 0);
           }, 0);
         }, 0);
-        return total / pieces;
+        return total / doneFgItems.length;
       })()
       : 0;
-    const polishWagePerPiece = fgItems.length
-      ? fgItems.reduce((sum, fg) => {
-        if (fg.polishStatus !== 'done') return sum;
-        return sum + parseFloat(fg.polishWage || 0);
-      }, 0) / pieces
+    const donePieces = fgItems.filter(f => f.polishStatus === 'done');
+    const polishWagePerPiece = donePieces.length
+      ? donePieces.reduce((sum, fg) => sum + parseFloat(fg.polishWage || 0), 0) / donePieces.length
       : 0;
-    const polishSubWagePerPiece = fgItems.length
-      ? fgItems.reduce((sum, fg) => {
-        if (fg.polishStatus !== 'done') return sum;
+    const polishSubWagePerPiece = donePieces.length
+      ? donePieces.reduce((sum, fg) => {
         const pj = fg.polishJobId ? DB.find('polishJobs', fg.polishJobId) : null;
         if (!pj) return sum;
         const subWage = parseFloat(pj.subWageTotal || 0) ||
           (pj.subWorkers || []).reduce((s, sw) => s + parseFloat(sw.totalWage || 0), 0);
         const pjItemCount = (pj.items || []).length || 1;
         return sum + subWage / pjItemCount;
-      }, 0) / (fgItems.filter(fg => fg.polishStatus === 'done').length || 1)
-      : 0;
-    const grandTotalWages = parseFloat(p.totalWage || 0) + (polishWagePerPiece + polishSubWagePerPiece) * pieces;
-    const totalMatCostPerPiece = matCost + ohCost + polishMatCostPerPiece;
+      }, 0) / donePieces.length
+      : 0; const grandTotalWages = parseFloat(p.totalWage || 0) + (polishWagePerPiece + polishSubWagePerPiece) * pieces;
+    const totalMatCostPerPiece = matCost + ohCost;
     const grandCostPc = (grandTotalWages / pieces) + totalMatCostPerPiece; const ohTitle = (p.overheadsSnapshot || []).map(o => `${o.label}: ${fmtMoney(o.amount)}`).join('\n');
     const pendingPolish = fgItems.filter(f => f.polishStatus === 'pending').length;
     const donePolish = fgItems.filter(f => f.polishStatus === 'done').length;
@@ -1790,6 +1788,7 @@ function renderProductions() {
               <div style="display:flex;flex-wrap:wrap;gap:0.5rem 1.2rem;padding-top:0.4rem;border-top:1px solid var(--border-light)">
                 <div class="pcc-item"><span class="pcc-label">Total wages / pc</span><span class="pcc-value pcc-amber">${fmtMoney(pieces > 0 ? grandTotalWages / pieces : 0)}</span></div>
                 ${totalMatCostPerPiece > 0 ? `<div class="pcc-item"><span class="pcc-label">Mat. cost / pc</span><span class="pcc-value pcc-blue">${fmtMoney(totalMatCostPerPiece)}</span></div>` : ''}
+${polishMatCostPerPiece > 0 ? `<div class="pcc-item"><span class="pcc-label" style="color:var(--purple)">🎨 Polish mat. / pc<br><span style="font-size:0.55rem;color:var(--text-light)">${donePolish} of ${pieces} polished</span></span><span class="pcc-value pcc-purple">${fmtMoney(polishMatCostPerPiece)}</span></div>` : ''}
                 ${grandCostPc > 0 ? `<div class="pcc-item pcc-total"><span class="pcc-label">Grand cost / pc</span><span class="pcc-value pcc-total-val">${fmtMoney(grandCostPc)}</span></div>` : ''}         </div>
             </div>
             ${(p.materialsUsed || []).length ? `<div class="prod-mats-used"><span class="pmu-label">Materials used (per pc):</span>${p.materialsUsed.map(m => `<span class="pmu-tag">${fmtNum(m.qty)} ${m.unit} ${m.mat}</span>`).join('')}</div>` : ''}
@@ -1905,10 +1904,12 @@ function _renderPolishWorkerHoldings(worker) {
   const h = worker.holdings || [];
   if (h.length) {
     el.innerHTML = `<div class="banner banner-warning" style="margin-bottom:0.5rem;font-size:0.77rem"><span class="banner-ico">📦</span><div><strong>Holding:</strong> ${h.map(x => `${fmtNum(x.qty)} ${x.unit} ${x.mat}`).join(' · ')}</div></div>`;
-    if (!_polishMatRows.length) {
-      _polishMatRows = h.map(x => ({ mat: x.mat, qty: x.qty, unit: x.unit, maxQty: parseFloat(x.qty) }));
-      _renderPolishMatRows();
-    }
+    // Update maxQty on existing mat rows from holdings, but DON'T auto-populate rows
+    _polishMatRows = _polishMatRows.map(r => {
+      const holding = h.find(x => x.mat === r.mat);
+      return { ...r, maxQty: parseFloat(holding?.qty || 0) };
+    });
+    _renderPolishMatRows();
   } else {
     el.innerHTML = '';
   }
@@ -2038,7 +2039,7 @@ function savePolishJob() {
   const used = _polishMatRows.filter(r => r.mat && parseFloat(r.qty) > 0).map(r => ({
     ...r,
     qtyPerPiece: parseFloat(r.qty),
-    qty: parseFloat(r.qty) * pieceCount
+    qty: parseFloat(r.qty) * pieceCount  // total deducted from holdings
   }));
   if (worker && used.length) {
     const holdings = [...(worker.holdings || [])];
@@ -2199,9 +2200,8 @@ function renderPolish() {
       const subW = parseFloat(pj.subWageTotal || 0) || subWorkers.reduce((s, sw) => s + parseFloat(sw.totalWage || 0), 0);
       const totalW = parseFloat(pj.totalWage || mainW + subW);
       const pjItemCount = (pj.items || []).length || 1;
-      const matCost = (pj.materialsUsed || []).reduce((s, u) => { const m = DB.all('materials').find(m => m.name === u.mat); return s + parseFloat(u.qty || 0) * parseFloat(m?.unitCost || 0); }, 0);
-      const matCostPerPc = pjItemCount > 0 ? matCost / pjItemCount : 0;
-      return `<div style="padding:0.85rem 1rem;border-bottom:1px solid var(--border-light)">
+      const matCost = (pj.materialsUsed || []).reduce((s, u) => { const m = DB.all('materials').find(m => m.name === u.mat); return s + parseFloat(u.qtyPerPiece || u.qty || 0) * parseFloat(m?.unitCost || 0) * pjItemCount; }, 0);
+      const matCostPerPc = pjItemCount > 0 ? matCost / pjItemCount : 0; return `<div style="padding:0.85rem 1rem;border-bottom:1px solid var(--border-light)">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:0.5rem;flex-wrap:wrap">
           <div>
             <div style="font-weight:700;font-size:0.9rem;color:var(--text-primary)">${pj.productName || 'Polish Job'}</div>
@@ -2222,7 +2222,7 @@ function renderPolish() {
         </div>
         ${subWorkers.length ? `<div style="margin-top:0.4rem;font-size:0.72rem;color:var(--info)">🔧 Sub: ${subWorkers.map(sw => `${sw.workerName} — ${fmtMoney(sw.totalWage || 0)}`).join(', ')}</div>` : ''}
         ${pj.notes ? `<div style="font-size:0.74rem;color:var(--text-tertiary);margin-top:0.3rem;font-style:italic">💬 ${pj.notes}</div>` : ''}
-        ${(pj.materialsUsed || []).length ? `<div style="font-size:0.72rem;color:var(--text-light);margin-top:0.25rem">📦 Materials: ${pj.materialsUsed.map(u => `${fmtNum(u.qty)} ${u.unit} ${u.mat}`).join(' · ')}</div>` : ''}
+        ${(pj.materialsUsed || []).length ? `<div style="font-size:0.72rem;color:var(--text-light);margin-top:0.25rem">📦 Materials (per pc): ${pj.materialsUsed.map(u => `${fmtNum(u.qtyPerPiece || u.qty)} ${u.unit} ${u.mat}`).join(' · ')} <span style="color:var(--text-tertiary)">× ${(pj.items || []).length} pcs</span></div>` : ''}
       </div>`;
     }).join('') + `</div>`;
   }
@@ -2278,13 +2278,13 @@ function renderFinished() {
         </table>
       </div>
     </div>` : '') +
-  (fl.length ? fl.map(f => {
-    const matCost = parseFloat(f.matCostPerPiece || 0), ohCost = parseFloat(f.ohCostPerPiece || 0);
-    const mainW = parseFloat(f.mainWage || f.totalWage || 0), subW = parseFloat(f.subWorkersWage || 0);
-    const polishW = parseFloat(f.polishWage || 0);
-    const isAwaitingPolish = f.polishStatus === 'pending' && !f.sold;
-    const isReadyToSell = f.polishStatus === 'done' && !f.sold;
-    return `<div class="fg-card" style="${isAwaitingPolish ? 'border-color:var(--amber)' : ''}${isReadyToSell ? 'border-color:var(--success-light)' : ''}">
+    (fl.length ? fl.map(f => {
+      const matCost = parseFloat(f.matCostPerPiece || 0), ohCost = parseFloat(f.ohCostPerPiece || 0);
+      const mainW = parseFloat(f.mainWage || f.totalWage || 0), subW = parseFloat(f.subWorkersWage || 0);
+      const polishW = parseFloat(f.polishWage || 0);
+      const isAwaitingPolish = f.polishStatus === 'pending' && !f.sold;
+      const isReadyToSell = f.polishStatus === 'done' && !f.sold;
+      return `<div class="fg-card" style="${isAwaitingPolish ? 'border-color:var(--amber)' : ''}${isReadyToSell ? 'border-color:var(--success-light)' : ''}">
       <div class="fg-icon">${isAwaitingPolish ? '🎨' : isReadyToSell ? '✨' : '🪑'}</div>
       <div class="fg-body">
         <div class="fg-product">${f.product}</div>
@@ -2293,7 +2293,7 @@ function renderFinished() {
           <span>👷 ${f.workerName}</span>
           <span>📅 ${fmtDate(f.date)}</span>
           ${f.sold ? `<span class="badge badge-success" style="font-size:0.65rem">🧾 Sold</span>`
-            : isReadyToSell ? `<span class="badge badge-success" style="font-size:0.65rem;background:var(--info-light);color:var(--info)">✨ Ready to Sell</span>`
+          : isReadyToSell ? `<span class="badge badge-success" style="font-size:0.65rem;background:var(--info-light);color:var(--info)">✨ Ready to Sell</span>`
             : `<span class="badge badge-amber" style="font-size:0.65rem">🎨 Awaiting Polish</span>`}
         </div>
         <div style="display:flex;gap:0.5rem 1rem;margin-top:0.3rem;font-size:0.75rem;flex-wrap:wrap">
@@ -2312,8 +2312,8 @@ function renderFinished() {
         <button class="act-btn danger" onclick="deleteFG('${f.id}')">🗑</button>
       </div>
     </div>`;
-  }).join('') : `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">✅</span>${fin.length ? 'No results' : 'No finished goods yet'}</div></div>`);
-}function deleteFG(id) { if (!confirm('Delete this record?')) return; DB.delete('finished', id); renderFinished(); updateCounts(); toast('Deleted', 'warning'); }
+    }).join('') : `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">✅</span>${fin.length ? 'No results' : 'No finished goods yet'}</div></div>`);
+} function deleteFG(id) { if (!confirm('Delete this record?')) return; DB.delete('finished', id); renderFinished(); updateCounts(); toast('Deleted', 'warning'); }
 
 /* ═══════════ SALES ═══════════ */
 let _cartItems = [], _editSaleId = null;
@@ -2377,20 +2377,18 @@ function _onProductSearch() {
     // Check if there are pending polish items matching the search
     const pendingMatch = DB.all('finished').filter(f => !f.sold && f.polishStatus === 'pending' && (f.product.toLowerCase().includes(q) || f.serialNumber.toLowerCase().includes(q)));
     if (pendingMatch.length) {
-      resEl.innerHTML = `< div style = "font-size:0.76rem;padding:0.5rem;background:var(--amber-pale);border:1px solid var(--amber-light);border-radius:7px;color:var(--amber-dark)" >🎨 <strong>${pendingMatch.length} item(s) found but awaiting polish</strong> — complete polish job first before selling.</div > `;
+      resEl.innerHTML = `<div style="font-size:0.76rem;padding:0.5rem;background:var(--amber-pale);border:1px solid var(--amber-light);border-radius:7px;color:var(--amber-dark)">🎨 <strong>${pendingMatch.length} item(s) found but awaiting polish</strong> — complete polish job first before selling.</div>`;
     } else {
-      resEl.innerHTML = `< div style = "font-size:0.76rem;color:var(--text-tertiary);padding:0.5rem 0.2rem" > No polished products match "<em>${q}</em>"</div > `;
+      resEl.innerHTML = `<div style="font-size:0.76rem;color:var(--text-tertiary);padding:0.5rem 0.2rem">No polished products match "<em>${q}</em>"</div>`;
     }
     return;
   }
   const grouped = {}; results.forEach(f => { if (!grouped[f.product]) grouped[f.product] = []; grouped[f.product].push(f); });
   resEl.innerHTML = Object.entries(grouped).map(([name, items]) => `
-        < div style = "margin-bottom:0.6rem" >
-          <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary);padding:0.2rem 0;margin-bottom:0.2rem">${name} · ${items.length} available</div>
-      ${
-        items.map(fg => {
-          const ic = parseFloat(fg.matCostPerPiece || 0) + parseFloat(fg.ohCostPerPiece || 0) + parseFloat(fg.totalWage || 0) + parseFloat(fg.polishWage || 0);
-          return `<div style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.65rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:7px;margin-bottom:0.25rem">
+        <div style="margin-bottom:0.6rem">  <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary);padding:0.2rem 0;margin-bottom:0.2rem">${name} · ${items.length} available</div>
+      ${items.map(fg => {
+    const ic = parseFloat(fg.matCostPerPiece || 0) + parseFloat(fg.ohCostPerPiece || 0) + parseFloat(fg.totalWage || 0) + parseFloat(fg.polishWage || 0);
+    return `<div style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.65rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:7px;margin-bottom:0.25rem">
           <div style="flex:1;min-width:0">
             <span style="font-family:var(--font-mono);font-size:0.8rem;font-weight:600;color:var(--text-primary)">SN: ${fg.serialNumber}</span>
             <span style="font-size:0.72rem;color:var(--text-tertiary);margin-left:0.5rem">👷 ${fg.workerName} · ${fmtDate(fg.date)}</span>
@@ -2399,28 +2397,26 @@ function _onProductSearch() {
           </div>
           <button onclick="_addToCart_byId('${fg.id}')" class="sn-add-btn" title="Add to bill">+</button>
         </div>`;
-        }).join('')
-      }
-    </div > `).join('');
+  }).join('')
+    }
+    </div>`).join('');
 }
 function _addToCart_byId(fgId) { const fg = DB.find('finished', fgId); if (fg) _addToCart(fg); }
 function _addToCart(fg) {
   if (fg.polishStatus === 'pending') { toast('This item must be polished before selling', 'warning'); return; }
   if (_cartItems.find(c => c.fgId === fg.id)) { toast('Already in cart', 'warning'); return; }
   _cartItems.push({ fgId: fg.id, product: fg.product, serialNumber: fg.serialNumber, workerName: fg.workerName, date: fg.date, matCostPerPiece: parseFloat(fg.matCostPerPiece || 0), ohCostPerPiece: parseFloat(fg.ohCostPerPiece || 0), totalWage: parseFloat(fg.totalWage || 0) + parseFloat(fg.polishWage || 0), price: 0 });
-  _onProductSearch(); _renderCart(); toast(`Added: ${ fg.product } (${ fg.serialNumber })`);
+  _onProductSearch(); _renderCart(); toast(`Added: ${fg.product} (${fg.serialNumber})`);
 }
 function _renderCart() {
   const wrap = document.getElementById('fsl-cart-wrap'), totWrap = document.getElementById('fsl-totals-wrap'), cntEl = document.getElementById('fsl-cart-count');
   if (!wrap) return;
-  if (cntEl) cntEl.textContent = _cartItems.length ? `(${ _cartItems.length } item${ _cartItems.length > 1 ? 's' : '' })` : '';
-  if (!_cartItems.length) { wrap.innerHTML = `< div style = "color:var(--text-tertiary);font-size:0.78rem;padding:0.6rem 0;text-align:center;border:1px dashed var(--border);border-radius:8px" > No items yet</div > `; if (totWrap) totWrap.style.display = 'none'; return; }
-  wrap.innerHTML = `< div style = "border:1px solid var(--border);border-radius:9px;overflow:hidden" >
-      <div style="display:grid;grid-template-columns:1fr 130px 28px;gap:0.4rem;padding:0.4rem 0.75rem;background:var(--bg-secondary);font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary)"><span>Product · Serial</span><span>Sale Price ₹</span><span></span></div>
-    ${
-      _cartItems.map((it, i) => {
-        const ic = it.matCostPerPiece + it.ohCostPerPiece + it.totalWage;
-        return `<div style="display:grid;grid-template-columns:1fr 130px 28px;gap:0.4rem;padding:0.5rem 0.75rem;align-items:center;border-top:1px solid var(--border-light)">
+  if (cntEl) cntEl.textContent = _cartItems.length ? `(${_cartItems.length} item${_cartItems.length > 1 ? 's' : ''})` : '';
+  if (!_cartItems.length) { wrap.innerHTML = `<div style="color:var(--text-tertiary);font-size:0.78rem;padding:0.6rem 0;text-align:center;border:1px dashed var(--border);border-radius:8px">No items yet</div>`; if (totWrap) totWrap.style.display = 'none'; return; }
+  wrap.innerHTML = `<div style="border:1px solid var(--border);border-radius:9px;overflow:hidden">    <div style="display:grid;grid-template-columns:1fr 130px 28px;gap:0.4rem;padding:0.4rem 0.75rem;background:var(--bg-secondary);font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary)"><span>Product · Serial</span><span>Sale Price ₹</span><span></span></div>
+    ${_cartItems.map((it, i) => {
+    const ic = it.matCostPerPiece + it.ohCostPerPiece + it.totalWage;
+    return `<div style="display:grid;grid-template-columns:1fr 130px 28px;gap:0.4rem;padding:0.5rem 0.75rem;align-items:center;border-top:1px solid var(--border-light)">
         <div>
           <div style="font-weight:600;font-size:0.83rem">${it.product}</div>
           <div style="font-family:var(--font-mono);font-size:0.7rem;color:var(--text-tertiary)">SN: ${it.serialNumber} · ${it.workerName}</div>
@@ -2434,10 +2430,10 @@ function _renderCart() {
         <input class="finput" id="cart-price-${i}" type="number" min="0" step="0.01" value="${it.price || ''}" placeholder="0.00" style="text-align:right;font-weight:600"/>
         <button class="row-del" onclick="removeFromCart(${i})">×</button>
       </div>`;
-      }).join('')
+  }).join('')
     }
-  </div > `;
-  _cartItems.forEach((_, i) => { document.getElementById(`cart - price - ${ i } `)?.addEventListener('input', e => { _cartItems[i].price = parseFloat(e.target.value) || 0; _recalcTotals(); }); });
+  </div>`;
+  _cartItems.forEach((_, i) => { document.getElementById(`cart-price-${i}`)?.addEventListener('input', e => { _cartItems[i].price = parseFloat(e.target.value) || 0; _recalcTotals(); }); });
   if (totWrap) totWrap.style.display = ''; _recalcTotals();
 }
 function removeFromCart(i) { _cartItems.splice(i, 1); _renderCart(); _onProductSearch(); }
@@ -2464,7 +2460,7 @@ function saveSalesBill() {
   const saleDoc = DB.insert('sales', { billno: document.getElementById('fsl-billno').value.trim(), date, buyerType, buyerName, buyerPhone: document.getElementById('fsl-buyer-phone').value.trim(), buyerAddr: document.getElementById('fsl-buyer-addr').value.trim(), items: _cartItems.map(it => ({ fgId: it.fgId, product: it.product, serialNumber: it.serialNumber, workerName: it.workerName, matCostPerPiece: it.matCostPerPiece, ohCostPerPiece: it.ohCostPerPiece, totalWage: it.totalWage, price: it.price })), subtotal, taxPct, taxAmt, totalAmount, product: _cartItems.map(it => it.product).join(', '), serialNumber: _cartItems.map(it => it.serialNumber).join(', ') });
   _cartItems.forEach(it => { DB.update('finished', it.fgId, { sold: true, soldDate: date, buyerName, buyerType, saleId: saleDoc.id }); });
   closeModal('modal-sales'); renderSales(); renderFinished(); updateCounts();
-  toast(`Bill ${ _editSaleId ? 'updated' : 'saved' } — ${ _cartItems.length } item(s) · ${ fmtMoney(totalAmount) } `);
+  toast(`Bill ${_editSaleId ? 'updated' : 'saved'} — ${_cartItems.length} item(s) · ${fmtMoney(totalAmount)} `);
   _editSaleId = null;
 }
 function renderSales() {
@@ -2473,16 +2469,16 @@ function renderSales() {
   const totalRev = allSales.reduce((s, sl) => s + parseFloat(sl.totalAmount || sl.amount || 0), 0);
   const statsEl = document.getElementById('sales-stats');
   if (statsEl) statsEl.innerHTML = `
-      < div class="stat-card" ><span class="sc-ico">🧾</span><div class="sc-lbl">Bills</div><div class="sc-val">${allSales.length}</div></div >
+      <div class="stat-card"><span class="sc-ico">🧾</span><div class="sc-lbl">Bills</div><div class="sc-val">${allSales.length}</div></div>
     <div class="stat-card"><span class="sc-ico">💰</span><div class="sc-lbl">Revenue</div><div class="sc-val" style="font-size:1.2rem;color:var(--success)">${fmtMoney(totalRev)}</div></div>
     <div class="stat-card"><span class="sc-ico">🏪</span><div class="sc-lbl">Shops</div><div class="sc-val">${allSales.filter(s => s.buyerType === 'Shop').length}</div></div>
     <div class="stat-card"><span class="sc-ico">👤</span><div class="sc-lbl">Customers</div><div class="sc-val">${allSales.filter(s => s.buyerType === 'Customer').length}</div></div>`;
   const listEl = document.getElementById('sales-list'); if (!listEl) return;
-  if (!allSales.length) { listEl.innerHTML = `< div class="table-card" > <div class="t-empty"><span class="t-empty-ico">🧾</span>No sales bills yet</div></div > `; return; }
-  if (!sales.length) { listEl.innerHTML = `< div class="table-card" > <div class="t-empty"><span class="t-empty-ico">🔍</span>No results</div></div > `; return; }
+  if (!allSales.length) { listEl.innerHTML = `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">🧾</span>No sales bills yet</div></div>`; return; }
+  if (!sales.length) { listEl.innerHTML = `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">🔍</span>No results</div></div>`; return; }
   listEl.innerHTML = sales.map(sl => {
     const items = sl.items || [{ product: sl.product, serialNumber: sl.serialNumber, price: sl.amount || sl.totalAmount, workerName: sl.workerName }];
-    return `< div class="wo-card" >
+    return `<div class="wo-card">
       <div class="wo-card-hdr">
         <div class="wc-left">
           <div class="wc-worker">${sl.buyerType === 'Shop' ? '🏪' : '👤'} ${sl.buyerName}${sl.buyerPhone ? ' · ' + sl.buyerPhone : ''}</div>
@@ -2517,14 +2513,14 @@ function renderSales() {
         <button class="btn btn-ghost btn-sm" onclick="printSalesBill('${sl.id}')">🖨 Print Bill</button>
         <button class="act-btn danger" onclick="deleteSale('${sl.id}')">🗑</button>
       </div></div>
-    </div > `;
+    </div>`;
   }).join('');
 }
 function printSalesBill(id) {
   const sl = DB.find('sales', id); if (!sl) return;
   const items = sl.items || [{ product: sl.product, serialNumber: sl.serialNumber, price: sl.amount || sl.totalAmount, workerName: sl.workerName || '' }];
   const win = window.open('', '_blank');
-  win.document.write(`< !DOCTYPE html > <html><head><title>Bill ${sl.billno || sl.id}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font - family:'DM Sans',Arial,sans-serif;padding:32px;color:#111;font-size:13px}.hdr{border - bottom:2px solid #1e3a5f;padding-bottom:14px;margin-bottom:20px}.brand{font - size:1.4rem;font-weight:700;color:#1e3a5f;font-family:Georgia,serif}.sub{color:#777;font-size:11px;margin-top:2px}.block{border:1px solid #e5e7eb;border-radius:8px;padding:14px;margin-bottom:12px}.lbl{font - size:10px;text-transform:uppercase;letter-spacing:0.8px;font-weight:700;color:#9ca3af;margin-bottom:4px}.val{font - size:13px}.brow{display:flex;gap:24px;flex-wrap:wrap}.bcol{flex:1;min-width:100px}table{width:100%;border-collapse:collapse;margin-top:8px}th{padding:7px 9px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;background:#f8fafc;color:#64748b;font-weight:700}td{padding:8px 9px;border-bottom:1px solid #f1f5f9;font-size:12px}.tr{text - align:right;font-weight:600}.total-sec{text - align:right;margin-top:14px;padding-top:14px;border-top:2px solid #e2e8f0}.tl{font - size:10px;color:#9ca3af;text-transform:uppercase}.tv{font - size:1.5rem;font-weight:700;color:#16a34a}.footer{margin - top:26px;text-align:center;font-size:10px;color:#cbd5e1;border-top:1px solid #f1f5f9;padding-top:10px}</style></head><body>
+  win.document.write(`<!DOCTYPE html><html><head><title>Bill ${sl.billno || sl.id}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font - family:'DM Sans',Arial,sans-serif;padding:32px;color:#111;font-size:13px}.hdr{border - bottom:2px solid #1e3a5f;padding-bottom:14px;margin-bottom:20px}.brand{font - size:1.4rem;font-weight:700;color:#1e3a5f;font-family:Georgia,serif}.sub{color:#777;font-size:11px;margin-top:2px}.block{border:1px solid #e5e7eb;border-radius:8px;padding:14px;margin-bottom:12px}.lbl{font - size:10px;text-transform:uppercase;letter-spacing:0.8px;font-weight:700;color:#9ca3af;margin-bottom:4px}.val{font - size:13px}.brow{display:flex;gap:24px;flex-wrap:wrap}.bcol{flex:1;min-width:100px}table{width:100%;border-collapse:collapse;margin-top:8px}th{padding:7px 9px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;background:#f8fafc;color:#64748b;font-weight:700}td{padding:8px 9px;border-bottom:1px solid #f1f5f9;font-size:12px}.tr{text - align:right;font-weight:600}.total-sec{text - align:right;margin-top:14px;padding-top:14px;border-top:2px solid #e2e8f0}.tl{font - size:10px;color:#9ca3af;text-transform:uppercase}.tv{font - size:1.5rem;font-weight:700;color:#16a34a}.footer{margin - top:26px;text-align:center;font-size:10px;color:#cbd5e1;border-top:1px solid #f1f5f9;padding-top:10px}</style></head><body>
       <div class="hdr"><div class="brand">Vishnupriyaa Industries</div><div class="sub">Sales Bill${sl.billno ? ' · #' + sl.billno : ''} &nbsp;·&nbsp; ${fmtDate(sl.date)}</div></div>
       <div class="block"><div class="lbl">Buyer Details</div><div class="brow" style="margin-top:8px"><div class="bcol"><div class="lbl">Type</div><div class="val">${sl.buyerType}</div></div><div class="bcol"><div class="lbl">Name</div><div class="val" style="font-weight:600">${sl.buyerName}</div></div>${sl.buyerPhone ? `<div class="bcol"><div class="lbl">Phone</div><div class="val">${sl.buyerPhone}</div></div>` : ''}</div>${sl.buyerAddr ? `<div style="margin-top:8px"><div class="lbl">Address</div><div class="val">${sl.buyerAddr}</div></div>` : ''}</div>
       <div class="block"><div class="lbl">Products Sold</div><table><thead><tr><th>#</th><th>Product</th><th>Serial Number</th><th>Produced By</th><th class="tr">Price</th></tr></thead><tbody>${items.map((it, idx) => `<tr><td>${idx + 1}</td><td>${it.product}</td><td style="font-family:monospace;font-size:11px">${it.serialNumber || '—'}</td><td>${it.workerName || '—'}</td><td class="tr">₹${parseFloat(it.price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td></tr>`).join('')}</tbody></table></div>
@@ -2550,7 +2546,7 @@ function renderReports() {
   const revenue = sales.reduce((s, sl) => s + parseFloat(sl.totalAmount || sl.amount || 0), 0);
   const awaitPolish = fin.filter(f => f.polishStatus === 'pending' && !f.sold).length;
   const body = document.getElementById('report-summary-body'); if (!body) return;
-  body.innerHTML = `< div style = "display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.9rem" >
+  body.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.9rem">
     <div class="stat-card"><span class="sc-ico">📦</span><div class="sc-lbl">Stock Value</div><div class="sc-val" style="font-size:1.1rem">${fmtMoney(stockVal)}</div></div>
     <div class="stat-card"><span class="sc-ico">👷</span><div class="sc-lbl">Workers</div><div class="sc-val">${workers.length}</div></div>
     <div class="stat-card"><span class="sc-ico">🏭</span><div class="sc-lbl">Productions</div><div class="sc-val">${prods.length}</div></div>
@@ -2561,15 +2557,15 @@ function renderReports() {
     <div class="stat-card" style="border-color:${revenue - (wages + polishWages) >= 0 ? 'var(--success-light)' : 'var(--danger-light)'}"><span class="sc-ico">${revenue - (wages + polishWages) >= 0 ? '📈' : '📉'}</span><div class="sc-lbl">Gross Profit</div><div class="sc-val" style="font-size:1.1rem;color:${revenue - (wages + polishWages) >= 0 ? 'var(--success)' : 'var(--danger)'}">${fmtMoney(revenue - (wages + polishWages))}</div></div>
     <div class="stat-card"><span class="sc-ico">⚠️</span><div class="sc-lbl">Low/Out Stock</div><div class="sc-val" style="color:${mats.filter(m => stockStatus(m) !== 'ok').length ? 'var(--warning)' : 'var(--success)'}">${mats.filter(m => stockStatus(m) !== 'ok').length}</div></div>
     <div class="stat-card"><span class="sc-ico">✨</span><div class="sc-lbl">Ready to Sell</div><div class="sc-val">${fin.filter(f => f.polishStatus === 'done' && !f.sold).length}</div></div>
-  </div > `;
+  </div>`;
 }
 function exportDataJSON() {
   const d = DB.exportAll(); const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob);
-  Object.assign(document.createElement('a'), { href: url, download: `VI - BMS - backup - ${ todayStr() }.json` }).click(); URL.revokeObjectURL(url); toast('Backup exported');
+  Object.assign(document.createElement('a'), { href: url, download: `VI - BMS - backup - ${todayStr()}.json` }).click(); URL.revokeObjectURL(url); toast('Backup exported');
 }
 function importDataJSON(file) {
   if (!file) return; const r = new FileReader();
-  r.onload = e => { try { const d = JSON.parse(e.target.result); if (!confirm(`Import from ${ d.exportedAt ? new Date(d.exportedAt).toLocaleString('en-IN') : 'unknown' }?\nThis will REPLACE all current data.`)) return; DB.importAll(d); location.reload(); } catch { toast('Invalid backup file', 'danger'); } };
+  r.onload = e => { try { const d = JSON.parse(e.target.result); if (!confirm(`Import from ${d.exportedAt ? new Date(d.exportedAt).toLocaleString('en-IN') : 'unknown'}?\nThis will REPLACE all current data.`)) return; DB.importAll(d); location.reload(); } catch { toast('Invalid backup file', 'danger'); } };
   r.readAsText(file);
 }
 function confirmDeleteAllData() {
@@ -2590,7 +2586,7 @@ function createModals() {
           </div>
           <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('modal-material')">Cancel</button><button class="btn btn-primary" id="mat-save">Save Material</button></div>
         </div>
-  </div >
+  </div>
 
   <div class="modal-backdrop" id="modal-supplier">
     <div class="modal modal-lg"><div class="modal-hdr"><div><h3 class="modal-title" id="sup-modal-ttl">New Supplier Bill</h3><p class="modal-sub">Stock updates automatically on save.</p></div><button class="modal-close" onclick="closeModal('modal-supplier')">×</button></div>
