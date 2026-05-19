@@ -422,26 +422,6 @@ html, body {
   border-top:1px solid var(--border-light); display:flex; justify-content:flex-end;
 }
 
-/* ════════════════════════════════════════════════
-   FINISHED GOODS CARDS
-   ════════════════════════════════════════════════ */
-.fg-card {
-  display:flex; align-items:flex-start; gap:1rem;
-  background:var(--bg-card); border:1px solid var(--border); border-radius:12px;
-  padding:1rem; margin-bottom:0.8rem; box-shadow:var(--shadow-xs);
-}
-.fg-icon {
-  font-size:1.8rem; flex-shrink:0; background:var(--amber-pale);
-  border-radius:10px; width:48px; height:48px;
-  display:flex; align-items:center; justify-content:center;
-}
-.fg-body { flex:1; min-width:0; }
-.fg-product { font-weight:700; font-size:0.95rem; color:var(--text-primary); margin-bottom:0.2rem; }
-.fg-meta {
-  display:flex; flex-wrap:wrap; gap:0.4rem 0.8rem;
-  font-size:0.75rem; color:var(--text-tertiary); margin-bottom:0.3rem;
-}
-.fg-wage { font-size:0.75rem; color:var(--text-tertiary); }
 
 /* ════════════════════════════════════════════════
    FORMS & MODALS
