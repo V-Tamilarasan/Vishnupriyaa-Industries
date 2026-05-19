@@ -154,7 +154,66 @@ function updateCounts() {
   set('sf-holding', holding);
   set('sf-low-stock', low);
 }
+function openMatPopup(fgId, triggerBtn) {
+  // Remove any existing popup
+  const existing = document.getElementById('mat-popup-overlay');
+  if (existing) { existing.remove(); if (existing.dataset.fgId === fgId) return; }
 
+  const fg = DB.find('finished', fgId);
+  const mats = fg?.materialsUsed || [];
+
+  const overlay = document.createElement('div');
+  overlay.id = 'mat-popup-overlay';
+  overlay.dataset.fgId = fgId;
+  overlay.style.cssText = `
+    position:fixed;inset:0;z-index:600;display:flex;
+    align-items:center;justify-content:center;padding:1rem;
+    background:rgba(0,0,0,0.45);
+  `;
+
+  const matRows = mats.length
+    ? mats.map(m => {
+        const mat = DB.all('materials').find(x => x.name === m.mat);
+        const cost = parseFloat(m.qty || 0) * parseFloat(mat?.unitCost || 0);
+        return `
+          <div class="mpop-row">
+            <div class="mpop-name">${m.mat}</div>
+            <div class="mpop-qty">${fmtNum(m.qty)} <span class="mpop-unit">${m.unit || ''}</span></div>
+            <div class="mpop-cost">${cost > 0 ? fmtMoney(cost) : '—'}</div>
+          </div>`;
+      }).join('')
+    : `<div style="text-align:center;padding:1.5rem 0;color:var(--text-light);font-size:0.8rem">No materials recorded</div>`;
+
+  const totalCost = mats.reduce((s, m) => {
+    const mat = DB.all('materials').find(x => x.name === m.mat);
+    return s + parseFloat(m.qty || 0) * parseFloat(mat?.unitCost || 0);
+  }, 0);
+
+  overlay.innerHTML = `
+    <div class="mpop-box">
+      <div class="mpop-hdr">
+        <div>
+          <div class="mpop-title">📦 Materials Used</div>
+          <div class="mpop-sub">${fg?.product || ''} · SN: ${fg?.serialNumber || '—'} · per piece</div>
+        </div>
+        <button class="mpop-close" onclick="document.getElementById('mat-popup-overlay').remove()">×</button>
+      </div>
+      <div class="mpop-body">
+        <div class="mpop-table-hdr">
+          <span>Material</span><span>Qty</span><span>Cost</span>
+        </div>
+        ${matRows}
+        ${totalCost > 0 ? `
+          <div class="mpop-total-row">
+            <span>Total raw material cost</span>
+            <span>${fmtMoney(totalCost)}</span>
+          </div>` : ''}
+      </div>
+    </div>`;
+
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
 function renderDashboard() {
   const mats = DB.all('materials'), workers = DB.all('workers');
   const fin = DB.all('finished'), sales = DB.all('sales'), prods = DB.all('productions');
@@ -2298,40 +2357,80 @@ function renderFinished() {
       </div>
     </div>` : '') +
     (fl.length ? fl.map(f => {
-      const matCost = parseFloat(f.matCostPerPiece || 0), ohCost = parseFloat(f.ohCostPerPiece || 0);
-      const mainW = parseFloat(f.mainWage || f.totalWage || 0), subW = parseFloat(f.subWorkersWage || 0);
-      const polishW = parseFloat(f.polishWage || 0);
-      const isAwaitingPolish = f.polishStatus === 'pending' && !f.sold;
-      const isReadyToSell = f.polishStatus === 'done' && !f.sold;
-      return `<div class="fg-card" style="${isAwaitingPolish ? 'border-color:var(--amber)' : ''}${isReadyToSell ? 'border-color:var(--success-light)' : ''}">
-      <div class="fg-icon">${isAwaitingPolish ? '🎨' : isReadyToSell ? '✨' : '🪑'}</div>
-      <div class="fg-body">
-        <div class="fg-product">${f.product}</div>
-        <div style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-tertiary);margin-bottom:0.25rem">📟 ${f.serialNumber || '—'}</div>
-        <div class="fg-meta">
-          <span>👷 ${f.workerName}</span>
-          <span>📅 ${fmtDate(f.date)}</span>
-          ${f.sold ? `<span class="badge badge-success" style="font-size:0.65rem">🧾 Sold</span>`
-          : isReadyToSell ? `<span class="badge badge-success" style="font-size:0.65rem;background:var(--info-light);color:var(--info)">✨ Ready to Sell</span>`
-            : `<span class="badge badge-amber" style="font-size:0.65rem">🎨 Awaiting Polish</span>`}
-        </div>
-        <div style="display:flex;gap:0.5rem 1rem;margin-top:0.3rem;font-size:0.75rem;flex-wrap:wrap">
-          <span>💳 Prod: <strong>${fmtMoney(mainW)}</strong></span>
-          ${subW > 0 ? `<span style="color:var(--info)">🔧 Sub: <strong>${fmtMoney(subW)}</strong></span>` : ''}
-          ${polishW > 0 ? `<span style="color:var(--purple)">🎨 Polish: <strong>${fmtMoney(polishW)}</strong></span>` : ''}
-          ${matCost > 0 ? `<span>📦 Mat.: <strong style="color:var(--amber-dark)">${fmtMoney(matCost)}</strong></span>` : ''}
-          ${ohCost > 0 ? `<span>💡 OH: <strong style="color:var(--info)">${fmtMoney(ohCost)}</strong></span>` : ''}
-        </div>
-        ${isAwaitingPolish ? `<div style="margin-top:0.4rem"><button class="btn btn-sm" style="background:var(--amber);color:#fff;font-size:0.73rem" onclick="openPolishModal(null)">🎨 Assign Polish</button></div>` : ''}
-        ${(f.materialsUsed || []).length ? `<div style="font-size:0.72rem;color:var(--text-light);margin-top:0.2rem">${f.materialsUsed.map(m => `${fmtNum(m.qty)} ${m.unit} ${m.mat}`).join(' · ')}</div>` : ''}
+  const matCost = parseFloat(f.matCostPerPiece || 0);
+  const ohCost = parseFloat(f.ohCostPerPiece || 0);
+  const mainW = parseFloat(f.mainWage || f.totalWage || 0);
+  const subW = parseFloat(f.subWorkersWage || 0);
+  const polishW = parseFloat(f.polishWage || 0);
+  const polishJob = f.polishJobId ? DB.find('polishJobs', f.polishJobId) : null;
+const polishMatCost = polishJob
+  ? (polishJob.materialsUsed || []).reduce((s, u) => {
+      const m = DB.all('materials').find(m => m.name === u.mat);
+      return s + parseFloat(u.qtyPerPiece || u.qty || 0) * parseFloat(m?.unitCost || 0);
+    }, 0)
+  : 0;
+const polishSubW = polishJob
+  ? (parseFloat(polishJob.subWageTotal || 0) || (polishJob.subWorkers || []).reduce((s, sw) => s + parseFloat(sw.totalWage || 0), 0)) / ((polishJob.items || []).length || 1)
+  : 0;
+const totalRawMat = matCost + polishMatCost;
+const totalWages = mainW + subW + polishW + polishSubW;
+const totalCost = totalRawMat + ohCost + totalWages; const isAwaitingPolish = f.polishStatus === 'pending' && !f.sold;
+  const isReadyToSell = f.polishStatus === 'done' && !f.sold;
+
+  const matsJson = JSON.stringify(f.materialsUsed || []).replace(/"/g, '&quot;');
+  const matCount = (f.materialsUsed || []).length;
+
+  return `<div class="fg-card2 ${isAwaitingPolish ? 'fg-awaiting' : isReadyToSell ? 'fg-ready' : f.sold ? 'fg-sold' : ''}">
+
+    <div class="fg2-top">
+      <div class="fg2-icon ${isAwaitingPolish ? 'icon-amber' : isReadyToSell ? 'icon-green' : 'icon-gray'}">
+        ${isAwaitingPolish ? '🎨' : isReadyToSell ? '✨' : '🪑'}
       </div>
-      <div class="acts" style="flex-direction:column;gap:0.4rem">
-        ${!f.sold && isReadyToSell ? `<button class="btn btn-primary btn-sm" onclick="openSalesModal('${f.id}')">🧾 Sell</button>` : ''}
-        ${!f.sold && isAwaitingPolish ? `<button class="btn btn-ghost btn-sm" style="font-size:0.7rem;color:var(--text-tertiary)" disabled title="Polish first">🔒 Sell</button>` : ''}
+
+      <div class="fg2-main">
+        <div class="fg2-product">${f.product}</div>
+        <div class="fg2-serial">📟 ${f.serialNumber || '—'}</div>
+        <div class="fg2-meta">
+          <span class="fg2-chip">👷 ${f.workerName}</span>
+          <span class="fg2-chip">📅 ${fmtDate(f.date)}</span>
+          ${f.sold
+            ? `<span class="fg2-status fg2-sold">Sold</span>`
+            : isReadyToSell
+              ? `<span class="fg2-status fg2-ready">✨ Ready to Sell</span>`
+              : `<span class="fg2-status fg2-pending">🎨 Awaiting Polish</span>`}
+        </div>
+      </div>
+
+      <div class="fg2-actions">
+        ${!f.sold && isReadyToSell
+          ? `<button class="btn btn-primary btn-sm" onclick="openSalesModal('${f.id}')">🧾 Sell</button>`
+          : !f.sold && isAwaitingPolish
+            ? `<button class="btn btn-ghost btn-sm" style="cursor:not-allowed;opacity:.5" disabled>🔒 Sell</button>`
+            : ''}
+        ${matCount > 0
+          ? `<button class="btn btn-ghost btn-sm fg2-mat-btn" onclick="openMatPopup('${f.id}',this)" data-mats="${matsJson}">
+              📦 Materials <span class="fg2-mat-count">${matCount}</span>
+             </button>`
+          : ''}
         <button class="act-btn danger" onclick="deleteFG('${f.id}')">🗑</button>
       </div>
-    </div>`;
-    }).join('') : `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">✅</span>${fin.length ? 'No results' : 'No finished goods yet'}</div></div>`);
+    </div>
+
+    <div class="fg2-costs">
+      ${totalRawMat > 0 ? `<div class="fg2-cost-item">
+        <span class="fg2-cost-lbl">Raw Mat.</span>
+        <span class="fg2-cost-val amber" title="Carpentry: ${fmtMoney(matCost)}${polishMatCost > 0 ? ' · Polish: ' + fmtMoney(polishMatCost) : ''}">${fmtMoney(totalRawMat)}</span>
+      </div>` : ''}
+      ${ohCost > 0 ? `<div class="fg2-cost-item"><span class="fg2-cost-lbl">Overhead</span><span class="fg2-cost-val info">${fmtMoney(ohCost)}</span></div>` : ''}
+      ${totalWages > 0 ? `<div class="fg2-cost-item">
+        <span class="fg2-cost-lbl">Wages</span>
+        <span class="fg2-cost-val" title="Carpentry: ${fmtMoney(mainW + subW)}${polishW + polishSubW > 0 ? ' · Polish: ' + fmtMoney(polishW + polishSubW) : ''}">${fmtMoney(totalWages)}</span>
+      </div>` : ''}
+      ${totalCost > 0 ? `<div class="fg2-cost-item fg2-cost-total"><span class="fg2-cost-lbl">Total Cost</span><span class="fg2-cost-val">${fmtMoney(totalCost)}</span></div>` : ''} ${isAwaitingPolish ? `<div style="margin-left:auto"><button class="btn btn-sm" style="background:var(--amber);color:#fff;font-size:0.72rem" onclick="openPolishModal(null)">🎨 Assign Polish</button></div>` : ''}
+    </div>
+
+  </div>`;
+}).join('') : `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">✅</span>${fin.length ? 'No results' : 'No finished goods yet'}</div></div>`);
 } function deleteFG(id) { if (!confirm('Delete this record?')) return; DB.delete('finished', id); renderFinished(); updateCounts(); toast('Deleted', 'warning'); }
 
 /* ═══════════ SALES ═══════════ */
