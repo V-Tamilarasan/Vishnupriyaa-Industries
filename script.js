@@ -173,15 +173,15 @@ function openMatPopup(fgId, triggerBtn) {
 
   const matRows = mats.length
     ? mats.map(m => {
-        const mat = DB.all('materials').find(x => x.name === m.mat);
-        const cost = parseFloat(m.qty || 0) * parseFloat(mat?.unitCost || 0);
-        return `
+      const mat = DB.all('materials').find(x => x.name === m.mat);
+      const cost = parseFloat(m.qty || 0) * parseFloat(mat?.unitCost || 0);
+      return `
           <div class="mpop-row">
             <div class="mpop-name">${m.mat}</div>
             <div class="mpop-qty">${fmtNum(m.qty)} <span class="mpop-unit">${m.unit || ''}</span></div>
             <div class="mpop-cost">${cost > 0 ? fmtMoney(cost) : '—'}</div>
           </div>`;
-      }).join('')
+    }).join('')
     : `<div style="text-align:center;padding:1.5rem 0;color:var(--text-light);font-size:0.8rem">No materials recorded</div>`;
 
   const totalCost = mats.reduce((s, m) => {
@@ -2357,30 +2357,30 @@ function renderFinished() {
       </div>
     </div>` : '') +
     (fl.length ? fl.map(f => {
-  const matCost = parseFloat(f.matCostPerPiece || 0);
-  const ohCost = parseFloat(f.ohCostPerPiece || 0);
-  const mainW = parseFloat(f.mainWage || f.totalWage || 0);
-  const subW = parseFloat(f.subWorkersWage || 0);
-  const polishW = parseFloat(f.polishWage || 0);
-  const polishJob = f.polishJobId ? DB.find('polishJobs', f.polishJobId) : null;
-const polishMatCost = polishJob
-  ? (polishJob.materialsUsed || []).reduce((s, u) => {
-      const m = DB.all('materials').find(m => m.name === u.mat);
-      return s + parseFloat(u.qtyPerPiece || u.qty || 0) * parseFloat(m?.unitCost || 0);
-    }, 0)
-  : 0;
-const polishSubW = polishJob
-  ? (parseFloat(polishJob.subWageTotal || 0) || (polishJob.subWorkers || []).reduce((s, sw) => s + parseFloat(sw.totalWage || 0), 0)) / ((polishJob.items || []).length || 1)
-  : 0;
-const totalRawMat = matCost + polishMatCost;
-const totalWages = mainW + subW + polishW + polishSubW;
-const totalCost = totalRawMat + ohCost + totalWages; const isAwaitingPolish = f.polishStatus === 'pending' && !f.sold;
-  const isReadyToSell = f.polishStatus === 'done' && !f.sold;
+      const matCost = parseFloat(f.matCostPerPiece || 0);
+      const ohCost = parseFloat(f.ohCostPerPiece || 0);
+      const mainW = parseFloat(f.mainWage || f.totalWage || 0);
+      const subW = parseFloat(f.subWorkersWage || 0);
+      const polishW = parseFloat(f.polishWage || 0);
+      const polishJob = f.polishJobId ? DB.find('polishJobs', f.polishJobId) : null;
+      const polishMatCost = polishJob
+        ? (polishJob.materialsUsed || []).reduce((s, u) => {
+          const m = DB.all('materials').find(m => m.name === u.mat);
+          return s + parseFloat(u.qtyPerPiece || u.qty || 0) * parseFloat(m?.unitCost || 0);
+        }, 0)
+        : 0;
+      const polishSubW = polishJob
+        ? (parseFloat(polishJob.subWageTotal || 0) || (polishJob.subWorkers || []).reduce((s, sw) => s + parseFloat(sw.totalWage || 0), 0)) / ((polishJob.items || []).length || 1)
+        : 0;
+      const totalRawMat = matCost + polishMatCost;
+      const totalWages = mainW + subW + polishW + polishSubW;
+      const totalCost = totalRawMat + ohCost + totalWages; const isAwaitingPolish = f.polishStatus === 'pending' && !f.sold;
+      const isReadyToSell = f.polishStatus === 'done' && !f.sold;
 
-  const matsJson = JSON.stringify(f.materialsUsed || []).replace(/"/g, '&quot;');
-  const matCount = (f.materialsUsed || []).length;
+      const matsJson = JSON.stringify(f.materialsUsed || []).replace(/"/g, '&quot;');
+      const matCount = (f.materialsUsed || []).length;
 
-  return `<div class="fg-card2 ${isAwaitingPolish ? 'fg-awaiting' : isReadyToSell ? 'fg-ready' : f.sold ? 'fg-sold' : ''}">
+      return `<div class="fg-card2 ${isAwaitingPolish ? 'fg-awaiting' : isReadyToSell ? 'fg-ready' : f.sold ? 'fg-sold' : ''}">
 
     <div class="fg2-top">
       <div class="fg2-icon ${isAwaitingPolish ? 'icon-amber' : isReadyToSell ? 'icon-green' : 'icon-gray'}">
@@ -2394,10 +2394,10 @@ const totalCost = totalRawMat + ohCost + totalWages; const isAwaitingPolish = f.
           <span class="fg2-chip">👷 ${f.workerName}</span>
           <span class="fg2-chip">📅 ${fmtDate(f.date)}</span>
           ${f.sold
-            ? `<span class="fg2-status fg2-sold">Sold</span>`
-            : isReadyToSell
-              ? `<span class="fg2-status fg2-ready">✨ Ready to Sell</span>`
-              : `<span class="fg2-status fg2-pending">🎨 Awaiting Polish</span>`}
+          ? `<span class="fg2-status fg2-sold">Sold</span>`
+          : isReadyToSell
+            ? `<span class="fg2-status fg2-ready">✨ Ready to Sell</span>`
+            : `<span class="fg2-status fg2-pending">🎨 Awaiting Polish</span>`}
         </div>
       </div>
 
@@ -2430,7 +2430,7 @@ const totalCost = totalRawMat + ohCost + totalWages; const isAwaitingPolish = f.
     </div>
 
   </div>`;
-}).join('') : `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">✅</span>${fin.length ? 'No results' : 'No finished goods yet'}</div></div>`);
+    }).join('') : `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">✅</span>${fin.length ? 'No results' : 'No finished goods yet'}</div></div>`);
 } function deleteFG(id) { if (!confirm('Delete this record?')) return; DB.delete('finished', id); renderFinished(); updateCounts(); toast('Deleted', 'warning'); }
 
 /* ═══════════ SALES ═══════════ */
@@ -2442,7 +2442,10 @@ function openSalesModal(preloadFgId = null, editSaleId = null) {
   document.getElementById('fsl-buyer-type').value = 'Shop';
   document.getElementById('fsl-tax-pct').value = '0';
   document.getElementById('fsl-prod-search').value = '';
+  document.getElementById('fsl-qty-input').value = '1';
   document.getElementById('fsl-serial-results').innerHTML = '';
+  document.getElementById('fsl-avail-count').innerHTML = '';
+
   if (editSaleId) {
     const sl = DB.find('sales', editSaleId);
     if (sl) {
@@ -2453,13 +2456,26 @@ function openSalesModal(preloadFgId = null, editSaleId = null) {
       document.getElementById('fsl-date').value = sl.date || todayStr();
       document.getElementById('fsl-buyer-type').value = sl.buyerType || 'Shop';
       document.getElementById('fsl-tax-pct').value = sl.taxPct || 0;
-      (sl.items || []).forEach(it => { const fg = DB.find('finished', it.fgId); if (fg) _cartItems.push({ fgId: it.fgId, product: it.product, serialNumber: it.serialNumber, workerName: it.workerName, date: fg.date, matCostPerPiece: parseFloat(it.matCostPerPiece || 0), ohCostPerPiece: parseFloat(it.ohCostPerPiece || fg.ohCostPerPiece || 0), totalWage: parseFloat(it.totalWage || 0), price: parseFloat(it.price || 0) }); });
-      const titleEl = document.querySelector('#modal-sales .modal-title'); if (titleEl) titleEl.textContent = 'Edit Sales Bill';
+      (sl.items || []).forEach(it => {
+        const fg = DB.find('finished', it.fgId);
+        if (fg) _cartItems.push({
+          fgId: it.fgId, product: it.product, serialNumber: it.serialNumber,
+          workerName: it.workerName, date: fg.date,
+          matCostPerPiece: parseFloat(it.matCostPerPiece || 0),
+          ohCostPerPiece: parseFloat(it.ohCostPerPiece || fg.ohCostPerPiece || 0),
+          totalWage: parseFloat(it.totalWage || 0), price: parseFloat(it.price || 0)
+        });
+      });
+      const titleEl = document.querySelector('#modal-sales .modal-title');
+      if (titleEl) titleEl.textContent = 'Edit Sales Bill';
     }
   } else {
-    const titleEl = document.querySelector('#modal-sales .modal-title'); if (titleEl) titleEl.textContent = 'New Sales Bill';
+    const titleEl = document.querySelector('#modal-sales .modal-title');
+    if (titleEl) titleEl.textContent = 'New Sales Bill';
   }
+
   _renderCart();
+
   if (preloadFgId && !editSaleId) {
     const fg = DB.find('finished', preloadFgId);
     if (fg && !fg.sold) {
@@ -2467,59 +2483,110 @@ function openSalesModal(preloadFgId = null, editSaleId = null) {
       _addToCart(fg);
     }
   }
-  const psEl = document.getElementById('fsl-prod-search'), psCl = psEl.cloneNode(true); psEl.parentNode.replaceChild(psCl, psEl);
+
+  const psEl = document.getElementById('fsl-prod-search');
+  const psCl = psEl.cloneNode(true); psEl.parentNode.replaceChild(psCl, psEl);
   document.getElementById('fsl-prod-search').addEventListener('input', _onProductSearch);
-  const txEl = document.getElementById('fsl-tax-pct'), txCl = txEl.cloneNode(true); txEl.parentNode.replaceChild(txCl, txEl);
+
+  const qtyEl = document.getElementById('fsl-qty-input');
+  const qtyCl = qtyEl.cloneNode(true); qtyEl.parentNode.replaceChild(qtyCl, qtyEl);
+  document.getElementById('fsl-qty-input').addEventListener('input', _onProductSearch);
+
+  const txEl = document.getElementById('fsl-tax-pct');
+  const txCl = txEl.cloneNode(true); txEl.parentNode.replaceChild(txCl, txEl);
   document.getElementById('fsl-tax-pct').addEventListener('input', _recalcTotals);
-  const btn = document.getElementById('sl-save'), cl = btn.cloneNode(true); btn.parentNode.replaceChild(cl, btn);
+
+  const btn = document.getElementById('sl-save');
+  const cl = btn.cloneNode(true); btn.parentNode.replaceChild(cl, btn);
   document.getElementById('sl-save').addEventListener('click', saveSalesBill);
   document.getElementById('sl-save').textContent = editSaleId ? '💾 Update Bill' : '🧾 Save Bill';
-  openModal('modal-sales'); setTimeout(() => document.getElementById('fsl-prod-search')?.focus(), 150);
+
+  openModal('modal-sales');
+  setTimeout(() => document.getElementById('fsl-prod-search')?.focus(), 150);
 }
 function _onProductSearch() {
   const q = (document.getElementById('fsl-prod-search')?.value || '').toLowerCase().trim();
-  const resEl = document.getElementById('fsl-serial-results'); if (!resEl) return;
-  if (!q) { resEl.innerHTML = ''; return; }
-  // Only show POLISHED (done) unsold items
+  const qty = parseInt(document.getElementById('fsl-qty-input')?.value) || 1;
+  const resEl = document.getElementById('fsl-serial-results');
+  const availEl = document.getElementById('fsl-avail-count');
+  if (!resEl) return;
+  if (!q) { resEl.innerHTML = ''; if (availEl) availEl.innerHTML = ''; return; }
+
   const unsold = DB.all('finished').filter(f => {
     if (_cartItems.find(c => c.fgId === f.id)) return false;
-    if (f.polishStatus !== 'done') return false; // must be polished
+    if (f.polishStatus !== 'done') return false;
     if (!f.sold) return true;
     if (_editSaleId && f.saleId === _editSaleId) return true;
     return false;
   });
+
   const byProduct = unsold.filter(f => f.product.toLowerCase().includes(q));
   const bySerial = unsold.filter(f => f.serialNumber.toLowerCase().includes(q) && !byProduct.find(p => p.id === f.id));
   const results = [...byProduct, ...bySerial];
+
+  if (availEl) {
+    if (results.length > 0) {
+      const enough = results.length >= qty;
+      availEl.innerHTML = `<div style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;border-radius:99px;font-size:0.76rem;font-weight:600;background:${enough ? 'var(--success-light)' : 'var(--danger-light)'};color:${enough ? 'var(--success)' : 'var(--danger)'}">
+        ${enough ? '✓' : '⚠'} ${results.length} available · Requesting ${qty}${!enough ? ' — <strong>not enough</strong>' : ''}
+      </div>`;
+    } else { availEl.innerHTML = ''; }
+  }
+
   if (!results.length) {
-    // Check if there are pending polish items matching the search
     const pendingMatch = DB.all('finished').filter(f => !f.sold && f.polishStatus === 'pending' && (f.product.toLowerCase().includes(q) || f.serialNumber.toLowerCase().includes(q)));
     if (pendingMatch.length) {
-      resEl.innerHTML = `<div style="font-size:0.76rem;padding:0.5rem;background:var(--amber-pale);border:1px solid var(--amber-light);border-radius:7px;color:var(--amber-dark)">🎨 <strong>${pendingMatch.length} item(s) found but awaiting polish</strong> — complete polish job first before selling.</div>`;
+      resEl.innerHTML = `<div style="font-size:0.76rem;padding:0.5rem 0.75rem;background:var(--amber-pale);border:1px solid var(--amber-light);border-radius:8px;color:var(--amber-dark)">🎨 <strong>${pendingMatch.length} item(s) found but awaiting polish</strong> — complete polish job first.</div>`;
     } else {
-      resEl.innerHTML = `<div style="font-size:0.76rem;color:var(--text-tertiary);padding:0.5rem 0.2rem">No polished products match "<em>${q}</em>"</div>`;
+      resEl.innerHTML = `<div style="font-size:0.76rem;color:var(--text-tertiary);padding:0.5rem 0">No polished products match "<em>${q}</em>"</div>`;
     }
     return;
   }
-  const grouped = {}; results.forEach(f => { if (!grouped[f.product]) grouped[f.product] = []; grouped[f.product].push(f); });
-  resEl.innerHTML = Object.entries(grouped).map(([name, items]) => `
-        <div style="margin-bottom:0.6rem">  <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary);padding:0.2rem 0;margin-bottom:0.2rem">${name} · ${items.length} available</div>
-      ${items.map(fg => {
-    const ic = parseFloat(fg.matCostPerPiece || 0) + parseFloat(fg.ohCostPerPiece || 0) + parseFloat(fg.totalWage || 0) + parseFloat(fg.polishWage || 0);
-    return `<div style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.65rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:7px;margin-bottom:0.25rem">
-          <div style="flex:1;min-width:0">
-            <span style="font-family:var(--font-mono);font-size:0.8rem;font-weight:600;color:var(--text-primary)">SN: ${fg.serialNumber}</span>
-            <span style="font-size:0.72rem;color:var(--text-tertiary);margin-left:0.5rem">👷 ${fg.workerName} · ${fmtDate(fg.date)}</span>
-            <span class="badge badge-success" style="font-size:0.6rem;margin-left:0.3rem">✨ Polished</span>
-            ${ic > 0 ? `<div style="font-size:0.69rem;color:var(--amber-dark)">Internal cost: ${fmtMoney(ic)}</div>` : ''}
-          </div>
-          <button onclick="_addToCart_byId('${fg.id}')" class="sn-add-btn" title="Add to bill">+</button>
-        </div>`;
-  }).join('')
-    }
-    </div>`).join('');
+
+  const grouped = {};
+  results.forEach(f => { if (!grouped[f.product]) grouped[f.product] = []; grouped[f.product].push(f); });
+
+  resEl.innerHTML = Object.entries(grouped).map(([name, items]) => {
+    const canAddAll = qty <= items.length;
+    return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:0.6rem">
+      <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;padding:0.55rem 0.85rem;background:var(--bg-secondary);border-bottom:1px solid var(--border-light)">
+        <span style="font-weight:700;font-size:0.84rem;color:var(--text-primary);flex:1">${name}</span>
+        <span style="font-size:0.7rem;color:var(--text-tertiary);font-family:var(--font-mono)">${items.length} in stock</span>
+        ${canAddAll
+        ? `<button class="btn btn-primary btn-sm" onclick="_addQtyToCart('${name.replace(/'/g, "\\'")}',${qty})">+ Add ${qty}</button>`
+        : `<span style="font-size:0.7rem;color:var(--danger);background:var(--danger-light);padding:0.2rem 0.5rem;border-radius:99px">Only ${items.length} available</span>`}
+      </div>
+      <div style="padding:0.3rem 0">
+        ${items.slice(0, 15).map(fg => {
+          const ic = parseFloat(fg.matCostPerPiece || 0) + parseFloat(fg.ohCostPerPiece || 0) + parseFloat(fg.totalWage || 0) + parseFloat(fg.polishWage || 0);
+          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:0.45rem 0.85rem;transition:background 0.1s;gap:0.5rem" onmouseover="this.style.background='var(--amber-pale)'" onmouseout="this.style.background=''">
+            <div style="flex:1;min-width:0">
+              <span style="font-family:var(--font-mono);font-size:0.8rem;font-weight:600;color:var(--text-primary)">SN: ${fg.serialNumber}</span>
+              <span style="font-size:0.7rem;color:var(--text-tertiary);margin-left:0.5rem">👷 ${fg.workerName} · ${fmtDate(fg.date)}</span>
+              ${ic > 0 ? `<div style="font-size:0.69rem;color:var(--amber-dark);margin-top:1px">Cost: ${fmtMoney(ic)}</div>` : ''}
+            </div>
+            <button onclick="_addToCart_byId('${fg.id}')" style="background:var(--amber);color:#fff;border:none;border-radius:6px;width:28px;height:28px;font-size:1.1rem;font-weight:700;cursor:pointer;flex-shrink:0;transition:background 0.15s" onmouseover="this.style.background='var(--amber-dark)'" onmouseout="this.style.background='var(--amber)'">+</button>
+          </div>`;
+        }).join('')}
+        ${items.length > 15 ? `<div style="font-size:0.7rem;color:var(--text-light);text-align:center;padding:0.4rem;border-top:1px solid var(--border-light)">+${items.length - 15} more items</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
 }
-function _addToCart_byId(fgId) { const fg = DB.find('finished', fgId); if (fg) _addToCart(fg); }
+function _addQtyToCart(productName, qty) {
+  const unsold = DB.all('finished').filter(f => {
+    if (_cartItems.find(c => c.fgId === f.id)) return false;
+    if (f.polishStatus !== 'done' || f.sold) return false;
+    return f.product === productName;
+  });
+  const toAdd = unsold.slice(0, qty);
+  if (!toAdd.length) { toast('No items available', 'warning'); return; }
+  toAdd.forEach(fg => {
+    _cartItems.push({ fgId: fg.id, product: fg.product, serialNumber: fg.serialNumber, workerName: fg.workerName, date: fg.date, matCostPerPiece: parseFloat(fg.matCostPerPiece || 0), ohCostPerPiece: parseFloat(fg.ohCostPerPiece || 0), totalWage: parseFloat(fg.totalWage || 0) + parseFloat(fg.polishWage || 0), price: 0 });
+  });
+  _renderCart(); _onProductSearch();
+  toast(`Added ${toAdd.length} × ${productName}`);
+} function _addToCart_byId(fgId) { const fg = DB.find('finished', fgId); if (fg) _addToCart(fg); }
 function _addToCart(fg) {
   if (fg.polishStatus === 'pending') { toast('This item must be polished before selling', 'warning'); return; }
   if (_cartItems.find(c => c.fgId === fg.id)) { toast('Already in cart', 'warning'); return; }
@@ -2583,69 +2650,394 @@ function saveSalesBill() {
 }
 function renderSales() {
   const allSales = DB.all('sales'), search = (document.getElementById('sales-search')?.value || '').toLowerCase();
-  const sales = allSales.filter(sl => (sl.product || '').toLowerCase().includes(search) || (sl.serialNumber || '').toLowerCase().includes(search) || (sl.buyerName || '').toLowerCase().includes(search));
-  const totalRev = allSales.reduce((s, sl) => s + parseFloat(sl.totalAmount || sl.amount || 0), 0);
+  const sales = allSales.filter(sl =>
+    (sl.product || '').toLowerCase().includes(search) ||
+    (sl.serialNumber || '').toLowerCase().includes(search) ||
+    (sl.buyerName || '').toLowerCase().includes(search)
+  );
+ 
   const statsEl = document.getElementById('sales-stats');
   if (statsEl) statsEl.innerHTML = `
-      <div class="stat-card"><span class="sc-ico">🧾</span><div class="sc-lbl">Bills</div><div class="sc-val">${allSales.length}</div></div>
-    <div class="stat-card"><span class="sc-ico">💰</span><div class="sc-lbl">Revenue</div><div class="sc-val" style="font-size:1.2rem;color:var(--success)">${fmtMoney(totalRev)}</div></div>
+    <div class="stat-card"><span class="sc-ico">🧾</span><div class="sc-lbl">Bills</div><div class="sc-val">${allSales.length}</div></div>
     <div class="stat-card"><span class="sc-ico">🏪</span><div class="sc-lbl">Shops</div><div class="sc-val">${allSales.filter(s => s.buyerType === 'Shop').length}</div></div>
-    <div class="stat-card"><span class="sc-ico">👤</span><div class="sc-lbl">Customers</div><div class="sc-val">${allSales.filter(s => s.buyerType === 'Customer').length}</div></div>`;
+    <div class="stat-card"><span class="sc-ico">👤</span><div class="sc-lbl">Customers</div><div class="sc-val">${allSales.filter(s => s.buyerType === 'Customer').length}</div></div>
+    <div class="stat-card"><span class="sc-ico">📦</span><div class="sc-lbl">Items Sold</div><div class="sc-val">${allSales.reduce((s, sl) => s + (sl.items?.length || 1), 0)}</div></div>`;
+ 
   const listEl = document.getElementById('sales-list'); if (!listEl) return;
+ 
   if (!allSales.length) { listEl.innerHTML = `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">🧾</span>No sales bills yet</div></div>`; return; }
-  if (!sales.length) { listEl.innerHTML = `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">🔍</span>No results</div></div>`; return; }
+  if (!sales.length)    { listEl.innerHTML = `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">🔍</span>No results</div></div>`; return; }
+ 
   listEl.innerHTML = sales.map(sl => {
-    const items = sl.items || [{ product: sl.product, serialNumber: sl.serialNumber, price: sl.amount || sl.totalAmount, workerName: sl.workerName }];
-    return `<div class="wo-card">
-      <div class="wo-card-hdr">
-        <div class="wc-left">
-          <div class="wc-worker">${sl.buyerType === 'Shop' ? '🏪' : '👤'} ${sl.buyerName}${sl.buyerPhone ? ' · ' + sl.buyerPhone : ''}</div>
-          <div class="wc-notes">${sl.billno ? 'Bill #' + sl.billno + ' · ' : ''}${fmtDate(sl.date)} · ${items.length} item${items.length > 1 ? 's' : ''}</div>
-          ${sl.buyerAddr ? `<div class="wc-notes">${sl.buyerAddr}</div>` : ''}
+    const items = sl.items || [{ product: sl.product, serialNumber: sl.serialNumber, workerName: sl.workerName || '' }];
+ 
+    // Group by product name
+    const grouped = {};
+    items.forEach(it => {
+      if (!grouped[it.product]) grouped[it.product] = [];
+      grouped[it.product].push(it);
+    });
+ 
+    const buyerIcon = sl.buyerType === 'Shop' ? '🏪' : '👤';
+ 
+    return `<div class="sl-card">
+ 
+      <!-- Bill header -->
+      <div class="sl-card-hdr">
+        <div class="sl-hdr-left">
+          <div class="sl-buyer-row">
+            <span class="sl-buyer-type-badge">${sl.buyerType || 'Customer'}</span>
+            <span class="sl-buyer-name">${buyerIcon} ${sl.buyerName || '—'}</span>
+          </div>
+          <div class="sl-meta">
+            ${sl.billno ? `<span>Bill #${sl.billno}</span><span class="sl-meta-dot">·</span>` : ''}
+            <span>${fmtDate(sl.date)}</span>
+            <span class="sl-meta-dot">·</span>
+            <span>${items.length} item${items.length > 1 ? 's' : ''}</span>
+            ${sl.buyerPhone ? `<span class="sl-meta-dot">·</span><span>📞 ${sl.buyerPhone}</span>` : ''}
+          </div>
+          ${sl.buyerAddr ? `<div class="sl-addr">📍 ${sl.buyerAddr}</div>` : ''}
         </div>
-        <div style="text-align:right">
-          <div style="font-weight:700;color:var(--success);font-family:var(--font-mono);font-size:1rem">${fmtMoney(sl.totalAmount || sl.amount)}</div>
-          ${sl.taxPct > 0 ? `<div style="font-size:0.68rem;color:var(--text-tertiary)">${fmtMoney(sl.subtotal || sl.amount)} + ${sl.taxPct}% tax</div>` : ''}
+        <div class="sl-hdr-right">
+          <div class="sl-type-icon">${buyerIcon}</div>
         </div>
       </div>
-      <div style="padding:0.3rem 1rem 0.6rem;border-top:1px solid var(--border-light)">
-        ${items.map(it => {
-      const ic = parseFloat(it.matCostPerPiece || 0) + parseFloat(it.ohCostPerPiece || 0) + parseFloat(it.totalWage || 0);
-      return `<div class="iss-mat-row">
-            <div>
-              <span class="imr-name">${it.product}</span>
-              <span style="font-family:var(--font-mono);font-size:0.7rem;color:var(--text-tertiary);margin-left:0.4rem">SN:${it.serialNumber}</span>
-              ${ic > 0 ? `<div style="font-size:0.68rem;margin-top:0.1rem;display:flex;gap:0.5rem;flex-wrap:wrap">
-                ${parseFloat(it.matCostPerPiece || 0) > 0 ? `<span style="color:var(--amber-dark)">📦 ${fmtMoney(it.matCostPerPiece)}</span>` : ''}
-                ${parseFloat(it.ohCostPerPiece || 0) > 0 ? `<span style="color:var(--info)">💡 ${fmtMoney(it.ohCostPerPiece)}</span>` : ''}
-                ${parseFloat(it.totalWage || 0) > 0 ? `<span style="color:var(--text-tertiary)">💳 ${fmtMoney(it.totalWage)}</span>` : ''}
-                <span style="font-weight:700;color:var(--text-primary)">Cost: ${fmtMoney(ic)}</span>
-              </div>`: ''}
+ 
+      <!-- Products grouped -->
+      <div class="sl-products">
+        ${Object.entries(grouped).map(([productName, productItems]) => `
+          <div class="sl-product-row">
+            <div class="sl-product-left">
+              <span class="sl-product-name">${productName}</span>
+              <span class="sl-product-count">${productItems.length} pc${productItems.length > 1 ? 's' : ''}</span>
             </div>
-            <span class="imr-qty" style="font-weight:600">${fmtMoney(it.price || 0)}</span>
-          </div>`;
-    }).join('')}
+            <div class="sl-sn-wrap">
+              ${productItems.map(it => `<span class="sl-sn-chip">${it.serialNumber || '—'}</span>`).join('')}
+            </div>
+          </div>`).join('')}
       </div>
-      <div class="wo-card-foot"><div class="acts">
+ 
+      <!-- Footer actions -->
+      <div class="sl-card-foot">
         <button class="btn btn-ghost btn-sm" onclick="openSalesModal(null,'${sl.id}')">✏️ Edit</button>
         <button class="btn btn-ghost btn-sm" onclick="printSalesBill('${sl.id}')">🖨 Print Bill</button>
         <button class="act-btn danger" onclick="deleteSale('${sl.id}')">🗑</button>
-      </div></div>
+      </div>
+ 
     </div>`;
   }).join('');
 }
+
+// ═══════════════════════════════════════════════════════════
+// REPLACE the existing printSalesBill function in script.js
+// with this updated version
+// ═══════════════════════════════════════════════════════════
+
 function printSalesBill(id) {
   const sl = DB.find('sales', id); if (!sl) return;
   const items = sl.items || [{ product: sl.product, serialNumber: sl.serialNumber, price: sl.amount || sl.totalAmount, workerName: sl.workerName || '' }];
+  const totalAmount = parseFloat(sl.totalAmount || sl.amount || 0);
+  const subtotal = parseFloat(sl.subtotal || totalAmount);
+  const taxAmt = parseFloat(sl.taxAmt || 0);
+
+  // Group items by product name
+  const grouped = {};
+  items.forEach(it => {
+    const k = it.product;
+    if (!grouped[k]) grouped[k] = [];
+    grouped[k].push(it);
+  });
+
   const win = window.open('', '_blank');
-  win.document.write(`<!DOCTYPE html><html><head><title>Bill ${sl.billno || sl.id}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font - family:'DM Sans',Arial,sans-serif;padding:32px;color:#111;font-size:13px}.hdr{border - bottom:2px solid #1e3a5f;padding-bottom:14px;margin-bottom:20px}.brand{font - size:1.4rem;font-weight:700;color:#1e3a5f;font-family:Georgia,serif}.sub{color:#777;font-size:11px;margin-top:2px}.block{border:1px solid #e5e7eb;border-radius:8px;padding:14px;margin-bottom:12px}.lbl{font - size:10px;text-transform:uppercase;letter-spacing:0.8px;font-weight:700;color:#9ca3af;margin-bottom:4px}.val{font - size:13px}.brow{display:flex;gap:24px;flex-wrap:wrap}.bcol{flex:1;min-width:100px}table{width:100%;border-collapse:collapse;margin-top:8px}th{padding:7px 9px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;background:#f8fafc;color:#64748b;font-weight:700}td{padding:8px 9px;border-bottom:1px solid #f1f5f9;font-size:12px}.tr{text - align:right;font-weight:600}.total-sec{text - align:right;margin-top:14px;padding-top:14px;border-top:2px solid #e2e8f0}.tl{font - size:10px;color:#9ca3af;text-transform:uppercase}.tv{font - size:1.5rem;font-weight:700;color:#16a34a}.footer{margin - top:26px;text-align:center;font-size:10px;color:#cbd5e1;border-top:1px solid #f1f5f9;padding-top:10px}</style></head><body>
-      <div class="hdr"><div class="brand">Vishnupriyaa Industries</div><div class="sub">Sales Bill${sl.billno ? ' · #' + sl.billno : ''} &nbsp;·&nbsp; ${fmtDate(sl.date)}</div></div>
-      <div class="block"><div class="lbl">Buyer Details</div><div class="brow" style="margin-top:8px"><div class="bcol"><div class="lbl">Type</div><div class="val">${sl.buyerType}</div></div><div class="bcol"><div class="lbl">Name</div><div class="val" style="font-weight:600">${sl.buyerName}</div></div>${sl.buyerPhone ? `<div class="bcol"><div class="lbl">Phone</div><div class="val">${sl.buyerPhone}</div></div>` : ''}</div>${sl.buyerAddr ? `<div style="margin-top:8px"><div class="lbl">Address</div><div class="val">${sl.buyerAddr}</div></div>` : ''}</div>
-      <div class="block"><div class="lbl">Products Sold</div><table><thead><tr><th>#</th><th>Product</th><th>Serial Number</th><th>Produced By</th><th class="tr">Price</th></tr></thead><tbody>${items.map((it, idx) => `<tr><td>${idx + 1}</td><td>${it.product}</td><td style="font-family:monospace;font-size:11px">${it.serialNumber || '—'}</td><td>${it.workerName || '—'}</td><td class="tr">₹${parseFloat(it.price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td></tr>`).join('')}</tbody></table></div>
-      <div class="total-sec">${sl.taxPct > 0 ? `<div style="font-size:11px;color:#9ca3af;margin-bottom:4px">Subtotal: ₹${parseFloat(sl.subtotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} + Tax (${sl.taxPct}%): ₹${parseFloat(sl.taxAmt || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>` : ''}<div class="tl">Total Amount</div><div class="tv">₹${parseFloat(sl.totalAmount || sl.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div></div>
-      <div class="footer">Vishnupriyaa Industries BMS &nbsp;·&nbsp; ${new Date().toLocaleDateString('en-IN')}</div>
-    </body></html>`);
-  win.document.close(); setTimeout(() => win.print(), 400);
+  win.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Invoice — ${sl.billno || sl.id.slice(0,8).toUpperCase()}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet"/>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter',sans-serif;background:#f4f4f0;color:#1a1a1a;font-size:13px;line-height:1.6;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  @page{margin:0;size:A4}
+  @media print{
+    body{background:#fff}
+    .no-print{display:none!important}
+    .page{box-shadow:none!important;margin:0!important;border-radius:0!important}
+  }
+
+  .page{
+    max-width:794px;margin:24px auto;
+    background:#fff;border-radius:4px;
+    box-shadow:0 4px 32px rgba(0,0,0,0.12);
+    overflow:hidden;
+  }
+
+  .accent-bar{height:5px;background:linear-gradient(90deg,#1a2744 0%,#2d4a8a 50%,#1a2744 100%)}
+
+  /* ── HEADER ── */
+  .inv-header{
+    display:flex;justify-content:space-between;align-items:flex-start;
+    padding:30px 44px 24px;
+    border-bottom:1px solid #eee;
+  }
+  .brand-name{
+    font-family:'Playfair Display',Georgia,serif;
+    font-size:22px;font-weight:700;color:#1a2744;letter-spacing:-0.3px;margin-bottom:3px;
+  }
+  .brand-tagline{font-size:11px;color:#888;letter-spacing:1.5px;text-transform:uppercase}
+  .invoice-meta{text-align:right}
+  .invoice-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#888;font-weight:600;margin-bottom:6px;}
+  .invoice-number{font-size:20px;font-weight:700;color:#1a2744;font-variant-numeric:tabular-nums;letter-spacing:-0.5px;}
+  .invoice-date{font-size:12px;color:#666;margin-top:4px}
+
+  /* ── TOP META STRIP (date + amount) ── */
+  .meta-strip{
+    display:grid;grid-template-columns:1fr 1fr;
+    background:#f8f8f6;border-bottom:1px solid #eee;
+  }
+  .meta-cell{padding:16px 28px;border-right:1px solid #eee}
+  .meta-cell:last-child{border-right:none}
+  .meta-cell-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#999;margin-bottom:5px;}
+  .meta-cell-value{font-size:13px;font-weight:600;color:#1a1a1a;line-height:1.4}
+  .meta-cell-sub{font-size:11px;color:#666;margin-top:2px}
+
+  /* ── BUYER BOX ── */
+  .buyer-section{padding:20px 44px 0;}
+  .buyer-box{
+    display:flex;align-items:stretch;
+    border:1.5px solid #1a2744;border-radius:10px;overflow:hidden;
+  }
+  .buyer-type-tab{
+    background:#1a2744;color:#fff;
+    padding:0 16px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:10px;font-weight:700;text-transform:uppercase;
+    letter-spacing:1.5px;flex-shrink:0;
+    min-width:48px;
+  }
+  .buyer-details{
+    padding:14px 20px;flex:1;
+    display:flex;align-items:center;gap:32px;flex-wrap:wrap;
+  }
+  .buyer-name-block{}
+  .buyer-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#999;margin-bottom:3px;}
+  .buyer-name{font-size:16px;font-weight:700;color:#1a2744;line-height:1.2;}
+  .buyer-contact{
+    display:flex;gap:20px;flex-wrap:wrap;padding-left:24px;border-left:1.5px solid #e8e8e4;
+  }
+  .buyer-contact-item{font-size:11px;color:#555;display:flex;align-items:center;gap:5px;}
+
+  /* ── ITEMS TABLE ── */
+  .items-section{padding:0 44px 0}
+  .items-title{
+    font-size:9px;font-weight:700;text-transform:uppercase;
+    letter-spacing:2px;color:#999;padding:22px 0 10px;
+  }
+
+  /* Product group block */
+  .product-group{margin-bottom:14px;}
+  .product-group-hdr{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:8px 12px;
+    background:#1a2744;border-radius:6px 6px 0 0;
+    margin-bottom:0;
+  }
+  .product-group-name{
+    font-size:12px;font-weight:700;color:#fff;letter-spacing:0.2px;
+  }
+  .product-group-meta{
+    font-size:10px;color:rgba(255,255,255,0.6);
+    display:flex;gap:12px;align-items:center;
+  }
+  .product-group-body{
+    border:1px solid #e0e0e0;border-top:none;
+    border-radius:0 0 6px 6px;overflow:hidden;
+  }
+
+  /* Serial numbers in horizontal wrapping grid */
+  .sn-grid{
+    display:flex;flex-wrap:wrap;gap:4px;
+    padding:8px 12px 6px;
+    border-bottom:1px solid #f0f0f0;
+  }
+  .sn-chip{
+    display:inline-block;
+    padding:2px 7px;
+    background:#f5f5f3;border:1px solid #e0e0da;border-radius:4px;
+    font-family:'Courier New',monospace;font-size:10px;color:#444;
+    white-space:nowrap;line-height:1.5;
+  }
+
+  /* Price row at bottom of each group */
+  .group-price-row{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:8px 12px;
+    background:#fafaf8;
+  }
+  .gpr-unit{font-size:11px;color:#666;}
+  .gpr-subtotal{
+    font-size:12px;font-weight:700;color:#1a2744;
+    font-family:'Courier New',monospace;
+  }
+
+  /* ── TOTALS ── */
+  .totals-section{
+    display:flex;justify-content:flex-end;
+    padding:16px 44px 24px;
+  }
+  .totals-box{min-width:260px}
+  .totals-row{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:5px 0;border-bottom:1px solid #f0f0f0;font-size:13px;
+  }
+  .totals-row:last-child{border-bottom:none}
+  .totals-row .t-label{color:#666}
+  .totals-row .t-value{font-family:'Courier New',monospace;font-size:13px}
+  .totals-row.total-row{
+    background:#1a2744;border-radius:8px;
+    padding:12px 16px;margin-top:10px;
+  }
+  .totals-row.total-row .t-label{color:rgba(255,255,255,0.8);font-weight:600;font-size:14px}
+  .totals-row.total-row .t-value{color:#fff;font-size:17px;font-weight:700}
+
+  /* ── FOOTER ── */
+  .inv-footer{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:14px 44px;background:#f8f8f6;border-top:1px solid #eee;
+  }
+  .footer-note{font-size:11px;color:#aaa;line-height:1.6}
+  .footer-sig{text-align:right}
+  .sig-line{width:120px;border-top:1px solid #ccc;margin:0 0 4px auto;padding-top:4px;}
+  .sig-label{font-size:9px;color:#aaa;text-transform:uppercase;letter-spacing:1px}
+
+  .print-bar{text-align:center;padding:16px;background:#f4f4f0;border-bottom:1px solid #e8e8e4;}
+  .print-btn{
+    background:#1a2744;color:#fff;border:none;border-radius:8px;padding:10px 28px;
+    font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;
+  }
+  .print-btn:hover{background:#2d4a8a}
+  @media print{.print-bar{display:none}}
+</style>
+</head>
+<body>
+
+<div class="print-bar no-print">
+  <button class="print-btn" onclick="window.print()">🖨 Print / Save as PDF</button>
+</div>
+
+<div class="page">
+  <div class="accent-bar"></div>
+
+  <!-- HEADER -->
+  <div class="inv-header">
+    <div>
+      <div class="brand-name">Vishnupriyaa Industries</div>
+      <div class="brand-tagline">Quality Furniture &amp; Woodcraft</div>
+    </div>
+    <div class="invoice-meta">
+      <div class="invoice-label">Sales Invoice</div>
+      <div class="invoice-number">${sl.billno ? '#' + sl.billno : '#' + sl.id.slice(0,8).toUpperCase()}</div>
+      <div class="invoice-date">${new Date(sl.date + 'T12:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})}</div>
+    </div>
+  </div>
+
+  <!-- META STRIP -->
+  <div class="meta-strip">
+    <div class="meta-cell">
+      <div class="meta-cell-label">Invoice Date</div>
+      <div class="meta-cell-value">${new Date(sl.date + 'T12:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>
+      <div class="meta-cell-sub">${items.length} item${items.length > 1 ? 's' : ''} · ${Object.keys(grouped).length} product type${Object.keys(grouped).length > 1 ? 's' : ''}</div>
+    </div>
+    <div class="meta-cell">
+      <div class="meta-cell-label">Amount Due</div>
+      <div class="meta-cell-value" style="font-size:18px;color:#059669">₹${totalAmount.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+      ${sl.taxPct > 0 ? `<div class="meta-cell-sub">Incl. ${sl.taxPct}% tax</div>` : '<div class="meta-cell-sub">No tax applied</div>'}
+    </div>
+  </div>
+
+  <!-- BUYER BOX -->
+  <div class="buyer-section">
+    <div class="buyer-box">
+      <div class="buyer-type-tab">${sl.buyerType || 'Customer'}</div>
+      <div class="buyer-details">
+        <div class="buyer-name-block">
+          <div class="buyer-label">Billed To</div>
+          <div class="buyer-name">${sl.buyerName || '—'}</div>
+        </div>
+        ${(sl.buyerPhone || sl.buyerAddr) ? `
+        <div class="buyer-contact">
+          ${sl.buyerPhone ? `<div class="buyer-contact-item">📞 ${sl.buyerPhone}</div>` : ''}
+          ${sl.buyerAddr ? `<div class="buyer-contact-item">📍 ${sl.buyerAddr}</div>` : ''}
+        </div>` : ''}
+      </div>
+    </div>
+  </div>
+
+  <!-- ITEMS — grouped by product, SNs horizontal -->
+  <div class="items-section">
+    <div class="items-title">Products Sold</div>
+    ${Object.entries(grouped).map(([productName, productItems]) => {
+      const groupSubtotal = productItems.reduce((s, it) => s + parseFloat(it.price || 0), 0);
+      const unitPrice = productItems.length > 0 ? parseFloat(productItems[0].price || 0) : 0;
+      const allSamePrice = productItems.every(it => parseFloat(it.price || 0) === unitPrice);
+      return `<div class="product-group">
+        <div class="product-group-hdr">
+          <span class="product-group-name">${productName}</span>
+          <span class="product-group-meta">
+            <span>${productItems.length} pc${productItems.length > 1 ? 's' : ''}</span>
+            <span style="font-weight:700;color:#fff">₹${groupSubtotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+          </span>
+        </div>
+        <div class="product-group-body">
+          <div class="sn-grid">
+            ${productItems.map(it => `<span class="sn-chip">${it.serialNumber || '—'}</span>`).join('')}
+          </div>
+          <div class="group-price-row">
+            <span class="gpr-unit">${allSamePrice && productItems.length > 1 ? `₹${unitPrice.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})} × ${productItems.length} pcs` : productItems.length === 1 ? `Produced by ${productItems[0].workerName || '—'}` : `Mixed pricing · ${productItems.length} pcs`}</span>
+            <span class="gpr-subtotal">₹${groupSubtotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>
+
+  <!-- TOTALS -->
+  <div class="totals-section">
+    <div class="totals-box">
+      <div class="totals-row">
+        <span class="t-label">Subtotal (${items.length} item${items.length > 1 ? 's' : ''})</span>
+        <span class="t-value">₹${subtotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+      </div>
+      ${sl.taxPct > 0 ? `<div class="totals-row">
+        <span class="t-label">GST / Tax (${sl.taxPct}%)</span>
+        <span class="t-value">₹${taxAmt.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+      </div>` : ''}
+      <div class="totals-row total-row">
+        <span class="t-label">Total Amount</span>
+        <span class="t-value">₹${totalAmount.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="inv-footer">
+    <div class="footer-note">
+      Thank you for your business.<br/>
+      Vishnupriyaa Industries — Est. quality since day one.
+    </div>
+    <div class="footer-sig">
+      <div class="sig-line"></div>
+      <div class="sig-label">Authorized Signature</div>
+    </div>
+  </div>
+
+</div>
+
+<script>window.onload = () => window.print();</script>
+</body>
+</html>`);
+  win.document.close();
 }
 function deleteSale(id) {
   const sl = DB.find('sales', id); if (!sl) return;
@@ -2939,13 +3331,31 @@ function createModals() {
   </div>
 
   <div class="modal-backdrop" id="modal-sales">
-    <div class="modal modal-lg"><div class="modal-hdr"><div><h3 class="modal-title">New Sales Bill</h3><p class="modal-sub">Search by product name — add serial numbers to cart</p></div><button class="modal-close" onclick="closeModal('modal-sales')">×</button></div>
+  <div class="modal modal-lg">
+    <div class="modal-hdr">
+      <div><h3 class="modal-title">New Sales Bill</h3><p class="modal-sub">Search product · set quantity · add to cart</p></div>
+      <button class="modal-close" onclick="closeModal('modal-sales')">×</button>
+    </div>
     <div class="modal-body">
-      <div class="approve-section"><p class="section-label">Add Products to Bill</p>
-        <div class="field-group" style="margin-bottom:0.6rem"><label>Search by Product Name</label><input class="finput" id="fsl-prod-search" type="text" placeholder="Type product name…" autocomplete="off"/></div>
-        <div id="fsl-serial-results" style="margin-bottom:0.5rem"></div>
+
+      <div class="approve-section">
+        <p class="section-label">Add Products to Bill</p>
+        <div style="display:grid;grid-template-columns:1fr 110px;gap:0.6rem;align-items:end;margin-bottom:0.5rem">
+          <div class="field-group" style="margin-bottom:0">
+            <label>Product Name or Serial No.</label>
+            <input class="finput" id="fsl-prod-search" type="text" placeholder="Type to search…" autocomplete="off"/>
+          </div>
+          <div class="field-group" style="margin-bottom:0">
+            <label>Quantity</label>
+            <input class="finput" id="fsl-qty-input" type="number" min="1" step="1" value="1" placeholder="1" style="text-align:center;font-weight:700"/>
+          </div>
+        </div>
+        <div id="fsl-avail-count" style="margin-bottom:0.4rem"></div>
+        <div id="fsl-serial-results" style="max-height:260px;overflow-y:auto"></div>
       </div>
-      <div class="approve-section"><p class="section-label">Cart <span id="fsl-cart-count" style="font-weight:400;font-size:0.7rem;color:var(--text-tertiary)"></span></p>
+
+      <div class="approve-section">
+        <p class="section-label">Cart <span id="fsl-cart-count" style="font-weight:400;font-size:0.7rem;color:var(--text-tertiary)"></span></p>
         <div id="fsl-cart-wrap"><div style="color:var(--text-tertiary);font-size:0.78rem;padding:0.6rem 0;text-align:center;border:1px dashed var(--border);border-radius:8px">No items yet</div></div>
         <div id="fsl-totals-wrap" style="display:none;margin-top:0.6rem;background:var(--bg-secondary);border-radius:8px;padding:0.7rem 0.9rem">
           <div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-bottom:0.3rem"><span style="color:var(--text-tertiary)">Subtotal</span><strong id="fsl-subtotal" style="font-family:var(--font-mono)">₹0.00</strong></div>
@@ -2953,21 +3363,30 @@ function createModals() {
           <div style="display:flex;justify-content:space-between;font-size:0.95rem;padding-top:0.4rem;border-top:1px solid var(--border)"><span style="font-weight:700">Total</span><strong id="fsl-grand-total" style="font-family:var(--font-mono);color:var(--success);font-size:1.05rem">₹0.00</strong></div>
         </div>
       </div>
-      <div class="approve-section"><p class="section-label">Buyer Details</p>
-        <div class="form-row three"><div class="field-group"><label>Type *</label><select class="finput" id="fsl-buyer-type"><option value="Shop">🏪 Shop</option><option value="Customer">👤 Customer</option></select></div><div class="field-group"><label>Name *</label><input class="finput" id="fsl-buyer-name" type="text" placeholder="Name or shop name"/></div><div class="field-group"><label>Phone</label><input class="finput" id="fsl-buyer-phone" type="tel" placeholder="Phone"/></div></div>
+
+      <div class="approve-section">
+        <p class="section-label">Buyer Details</p>
+        <div class="form-row three">
+          <div class="field-group"><label>Type *</label><select class="finput" id="fsl-buyer-type"><option value="Shop">🏪 Shop</option><option value="Customer">👤 Customer</option></select></div>
+          <div class="field-group"><label>Name *</label><input class="finput" id="fsl-buyer-name" type="text" placeholder="Name or shop name"/></div>
+          <div class="field-group"><label>Phone</label><input class="finput" id="fsl-buyer-phone" type="tel" placeholder="Phone"/></div>
+        </div>
         <div class="form-row"><div class="field-group fg-full"><label>Address</label><input class="finput" id="fsl-buyer-addr" type="text" placeholder="Address…"/></div></div>
       </div>
-      <div class="approve-section"><p class="section-label">Bill Details</p>
+
+      <div class="approve-section">
+        <p class="section-label">Bill Details</p>
         <div class="form-row three">
           <div class="field-group"><label>Tax %</label><input class="finput" id="fsl-tax-pct" type="number" min="0" max="100" step="0.01" placeholder="0" value="0"/></div>
           <div class="field-group"><label>Date *</label><input class="finput" id="fsl-date" type="date"/></div>
           <div class="field-group"><label>Bill Number</label><input class="finput" id="fsl-billno" type="text" placeholder="SB-001"/></div>
         </div>
       </div>
+
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('modal-sales')">Cancel</button><button class="btn btn-primary" id="sl-save">🧾 Save Bill</button></div>
-    </div>
   </div>
+</div>
     `;
   document.querySelectorAll('.modal-backdrop').forEach(el => el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); }));
 
