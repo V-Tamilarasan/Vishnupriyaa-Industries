@@ -102,7 +102,7 @@ const PAGE_CONFIG = {
   productions: { label: 'Production Log', btn: { text: '+ Record Production', fn: openProductionModal } },
   polish: { label: 'Polish Jobs', btn: { text: '+ New Polish Job', fn: () => openPolishModal(null) } },
   polish: { label: 'Polish Jobs', btn: { text: '+ New Polish Job', fn: () => openPolishModal(null) } },
-  finished: { label: 'Finished Goods', btn: null },
+  finished: { label: 'Finished Goods', btn: { text: '+ Add Purchased Stock', fn: openPurchasedFGModal } },
   sales: { label: 'Sales Bills', btn: { text: '+ New Sales Bill', fn: () => openSalesModal(null) } },
   reports: { label: 'Reports', btn: null },
 };
@@ -2308,6 +2308,177 @@ function renderPolish() {
   listEl.innerHTML = html;
 }
 /* ═══════════ FINISHED GOODS ═══════════ */
+/* ═══════════ PURCHASED FINISHED GOODS ═══════════ */
+let _pfgRows = [], _pfgRowCount = 0;
+
+function openPurchasedFGModal() {
+  _pfgRows = []; _pfgRowCount = 0;
+  document.getElementById('pfg-supplier').value = '';
+  document.getElementById('pfg-billno').value = '';
+  document.getElementById('pfg-date').value = todayStr();
+  document.getElementById('pfg-notes').value = '';
+  document.getElementById('pfg-rows-wrap').innerHTML =
+    '<div class="sup-empty-hint">No items yet — click "+ Add Row"</div>';
+
+  buildCombo('pfg-supplier', 'pfg-supplier-drop',
+    [...new Set(DB.all('bills').map(b => b.supplier).filter(Boolean))]);
+
+  const addBtn = document.getElementById('pfg-add-row');
+  const fresh = addBtn.cloneNode(true); addBtn.parentNode.replaceChild(fresh, addBtn);
+  document.getElementById('pfg-add-row').addEventListener('click', _pfgAddRow);
+
+  const saveBtn = document.getElementById('pfg-save');
+  const sfresh = saveBtn.cloneNode(true); saveBtn.parentNode.replaceChild(sfresh, saveBtn);
+  document.getElementById('pfg-save').addEventListener('click', savePurchasedFG);
+
+  openModal('modal-purchased-fg');
+  setTimeout(() => document.getElementById('pfg-supplier')?.focus(), 100);
+}
+function _pfgAddRow() {
+  const wrap = document.getElementById('pfg-rows-wrap');
+  const hint = wrap.querySelector('.sup-empty-hint');
+  if (hint) hint.remove();
+  const i = _pfgRowCount++;
+  _pfgRows[i] = { name: '', qty: 1, cost: 0, serials: [] };
+  const div = document.createElement('div');
+  div.className = 'bill-row-wrap'; div.id = `pfg-wrap-${i}`;
+  div.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 80px 120px 28px;gap:0.4rem;align-items:center;margin-bottom:0.4rem">
+      <div class="combo-wrap">
+        <input class="finput" id="pfg-name-${i}" placeholder="Product name" autocomplete="off"/>
+        <div class="combo-drop" id="pfg-name-drop-${i}"></div>
+      </div>
+      <input class="finput" id="pfg-qty-${i}" type="number" min="1" step="1" value="1" placeholder="Qty"/>
+      <div style="position:relative">
+        <span style="position:absolute;left:.65rem;top:50%;transform:translateY(-50%);color:var(--text-light);font-size:.78rem;pointer-events:none">₹</span>
+        <input class="finput" id="pfg-cost-${i}" type="number" min="0" step="0.01" placeholder="0.00" style="padding-left:1.5rem"/>
+      </div>
+      <button class="row-del" onclick="pfgDelRow(${i})">×</button>
+    </div>
+    <div id="pfg-serials-${i}" style="padding:0.3rem 0 0.5rem;margin-bottom:0.4rem;border-bottom:1px dashed var(--border-light)">
+      <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--amber-dark);margin-bottom:0.4rem">Serial Numbers</div>
+      <div id="pfg-sn-rows-${i}"></div>
+    </div>`;
+  wrap.appendChild(div);
+
+  const existingProducts = [...new Set(DB.all('finished').map(f => f.product).filter(Boolean))];
+  buildCombo(`pfg-name-${i}`, `pfg-name-drop-${i}`, existingProducts,
+    val => { _pfgRows[i].name = val; });
+
+  document.getElementById(`pfg-name-${i}`).addEventListener('input',
+    e => { _pfgRows[i].name = e.target.value; });
+
+  const qtyEl = document.getElementById(`pfg-qty-${i}`);
+  qtyEl.addEventListener('input', e => {
+    _pfgRows[i].qty = parseInt(e.target.value) || 1;
+    _pfgRenderSnRows(i);
+  });
+
+  document.getElementById(`pfg-cost-${i}`).addEventListener('input',
+    e => { _pfgRows[i].cost = parseFloat(e.target.value) || 0; });
+
+  _pfgRenderSnRows(i);
+  setTimeout(() => document.getElementById(`pfg-name-${i}`)?.focus(), 50);
+}
+function _pfgRenderSnRows(i) {
+  const qty = parseInt(document.getElementById(`pfg-qty-${i}`)?.value) || 1;
+  const wrap = document.getElementById(`pfg-sn-rows-${i}`); if (!wrap) return;
+  const existing = [...wrap.querySelectorAll('.pfg-sn-input')].map(el => el.value);
+  wrap.innerHTML = Array.from({ length: qty }, (_, j) => {
+    const prev = existing[j] || '';
+    return `<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem">
+      <span style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-tertiary);min-width:52px">Piece ${j + 1}</span>
+      <input class="finput pfg-sn-input" data-row="${i}" data-idx="${j}" type="text" value="${prev}" placeholder="e.g. VI-PUR-00${j + 1}" style="flex:1;font-size:0.82rem"/>
+      <span class="pfg-sn-st" id="pfg-sn-st-${i}-${j}" style="font-size:0.7rem;min-width:60px"></span>
+    </div>`;
+  }).join('');
+  wrap.querySelectorAll('.pfg-sn-input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const v = inp.value.trim();
+      const stEl = document.getElementById(`pfg-sn-st-${inp.dataset.row}-${inp.dataset.idx}`); if (!stEl) return;
+      if (!v) { stEl.innerHTML = ''; return; }
+      const allInputs = document.querySelectorAll('.pfg-sn-input');
+      const allVals = [...allInputs].map(x => x.value.trim()).filter(x => x);
+      const dupeInForm = allVals.filter(x => x === v).length > 1;
+      if (dupeInForm) stEl.innerHTML = `<span style="color:var(--danger)">✕ Dup</span>`;
+      else if (!DB.isSerialUnique(v)) stEl.innerHTML = `<span style="color:var(--danger)">✕ Used</span>`;
+      else stEl.innerHTML = `<span style="color:var(--success)">✓</span>`;
+    });
+  });
+}
+
+function pfgDelRow(i) {
+  const el = document.getElementById(`pfg-wrap-${i}`); if (el) el.remove();
+  _pfgRows[i] = null;
+  const wrap = document.getElementById('pfg-rows-wrap');
+  if (!wrap.querySelector('.bill-row-wrap'))
+    wrap.innerHTML = '<div class="sup-empty-hint">No items yet — click "+ Add Row"</div>';
+}
+
+function savePurchasedFG() {
+  const supplier = document.getElementById('pfg-supplier').value.trim();
+  const date     = document.getElementById('pfg-date').value;
+  const billno   = document.getElementById('pfg-billno').value.trim();
+  const notes    = document.getElementById('pfg-notes').value.trim();
+
+  if (!supplier) { toast('Supplier name required', 'danger'); return; }
+  if (!date)     { toast('Select a date', 'danger'); return; }
+
+  const valid = _pfgRows.filter(r => r && r.name && (parseInt(r.qty) || 1) >= 1);
+  if (!valid.length) { toast('Add at least one product row', 'danger'); return; }
+
+  // Collect and validate serial numbers from DOM
+  const rowSerials = [];
+  for (let ri = 0; ri < _pfgRowCount; ri++) {
+    if (!_pfgRows[ri]) continue;
+    const qty = parseInt(document.getElementById(`pfg-qty-${ri}`)?.value) || 1;
+    const snInputs = [...document.querySelectorAll(`#pfg-sn-rows-${ri} .pfg-sn-input`)].map(el => el.value.trim());
+    const serials = snInputs.slice(0, qty);
+    if (serials.filter(s => !s).length) { toast(`Enter all serial numbers for "${_pfgRows[ri].name}"`, 'danger'); return; }
+    if (new Set(serials).size !== serials.length) { toast(`Duplicate serial numbers in "${_pfgRows[ri].name}"`, 'danger'); return; }
+    const usedAlready = serials.filter(s => !DB.isSerialUnique(s));
+    if (usedAlready.length) { toast(`Already used: ${usedAlready.join(', ')}`, 'danger'); return; }
+    rowSerials.push({ ri, serials });
+  }
+  // Cross-row duplicate check
+  const allSerials = rowSerials.flatMap(r => r.serials);
+  if (new Set(allSerials).size !== allSerials.length) { toast('Duplicate serial numbers across rows', 'danger'); return; }
+
+  const batchId = DB.uid();
+  let totalCreated = 0;
+
+  rowSerials.forEach(({ ri, serials }) => {
+    const r = _pfgRows[ri];
+    const unitCost = parseFloat(document.getElementById(`pfg-cost-${ri}`)?.value) || 0;
+    serials.forEach(sn => {
+      DB.insert('finished', {
+        product:        r.name,
+        serialNumber:   sn,
+        date,
+        workerName:     supplier,
+        workerId:       null,
+        productionId:   null,
+        pfgBatchId:     batchId,
+        matCostPerPiece: unitCost,
+        ohCostPerPiece: 0,
+        totalWage:      0,
+        subWorkers:     [],
+        materialsUsed:  [],
+        polishStatus:   'done',
+        sold:           false,
+        purchasedStock: true,
+        supplierName:   supplier,
+        billno,
+        notes
+      });
+      totalCreated++;
+    });
+  });
+
+  closeModal('modal-purchased-fg');
+  renderFinished(); updateCounts();
+  toast(`${totalCreated} item(s) added to Finished Goods ✅`);
+}
 function renderFinished() {
   const fin = DB.all('finished'), search = (document.getElementById('fg-search')?.value || '').toLowerCase();
   const _fgFilter = document.querySelector('#fg-pills .tpill.active')?.dataset.val || 'all';
@@ -2315,6 +2486,7 @@ function renderFinished() {
   if (_fgFilter === 'pending') fl = fl.filter(f => f.polishStatus === 'pending' && !f.sold);
   if (_fgFilter === 'polished') fl = fl.filter(f => f.polishStatus === 'done' && !f.sold);
   if (_fgFilter === 'sold') fl = fl.filter(f => f.sold);
+
   const inStock = fin.filter(f => !f.sold).length;
   const awaitPolish = fin.filter(f => f.polishStatus === 'pending' && !f.sold).length;
   const readyToSell = fin.filter(f => f.polishStatus === 'done' && !f.sold).length;
@@ -2339,99 +2511,205 @@ function renderFinished() {
   const summaryRows = Object.values(pmap).sort((a, b) => b.total - a.total);
   const list = document.getElementById('fg-list'); if (!list) return;
 
+  // Group purchased stock items by pfgBatchId for single-card display
+  const pfgBatchMap = {};
+  const nonBatchItems = [];
+  fl.forEach(f => {
+    if (f.pfgBatchId) {
+      if (!pfgBatchMap[f.pfgBatchId]) pfgBatchMap[f.pfgBatchId] = [];
+      pfgBatchMap[f.pfgBatchId].push(f);
+    } else {
+      nonBatchItems.push(f);
+    }
+  });
+
+  // Render a batch purchased-stock card (like production log card)
+  function renderPfgBatchCard(items) {
+    const first = items[0];
+    const soldCount = items.filter(f => f.sold).length;
+    const unsoldItems = items.filter(f => !f.sold);
+    const firstUnsold = unsoldItems[0];
+    const batchTotal = items.reduce((s, f) => s + parseFloat(f.matCostPerPiece || 0), 0);
+
+    const grouped = {};
+    items.forEach(f => {
+      const key = f.product + '||' + parseFloat(f.matCostPerPiece || 0);
+      if (!grouped[key]) grouped[key] = { product: f.product, unitCost: parseFloat(f.matCostPerPiece || 0), items: [] };
+      grouped[key].items.push(f);
+    });
+    const groups = Object.values(grouped);
+
+    const productLines = groups.map(g => {
+      const gSold = g.items.filter(f => f.sold).length;
+      const gSubtotal = g.unitCost * g.items.length;
+      return `
+        <div style="display:flex;align-items:stretch;gap:0;border-bottom:1px solid var(--border-light)">
+
+          <div style="width:3px;flex-shrink:0;background:var(--border-light);border-radius:0"></div>
+
+          <div style="flex:1;padding:0.7rem 0.9rem">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem">
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:700;font-size:0.87rem;color:var(--text-primary);margin-bottom:0.35rem">${g.product}</div>
+                <div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-bottom:0.4rem">
+                  ${g.items.map(f => `<span style="display:inline-block;font-family:var(--font-mono);font-size:0.7rem;padding:0.12rem 0.45rem;border-radius:5px;border:1px solid ${f.sold ? 'var(--border-light)' : 'var(--border)'};background:${f.sold ? 'transparent' : 'var(--bg-secondary)'};color:${f.sold ? 'var(--text-light)' : 'var(--text-secondary)'};${f.sold ? 'text-decoration:line-through' : ''}">${f.serialNumber}</span>`).join('')}
+                </div>
+                <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+                  <span style="font-size:0.72rem;color:var(--text-tertiary)">${g.items.length} pc${g.items.length > 1 ? 's' : ''}</span>
+                  ${gSold > 0 ? `<span style="font-size:0.72rem;color:var(--text-tertiary)">·</span><span class="badge badge-success" style="font-size:0.62rem">${gSold} sold</span>` : ''}
+                </div>
+              </div>
+
+              <div style="flex-shrink:0;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:0.35rem">
+                ${g.unitCost > 0 ? `
+                  <div style="background:var(--bg-secondary);border:1px solid var(--border-light);border-radius:8px;padding:0.35rem 0.65rem;text-align:right">
+                    <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.6px;font-weight:700;color:var(--text-light);margin-bottom:0.2rem">Unit cost</div>
+                    <div style="font-family:var(--font-mono);font-size:0.88rem;font-weight:700;color:var(--text-primary)">${fmtMoney(g.unitCost)}</div>
+                  </div>` : ''}
+                ${gSubtotal > 0 && g.items.length > 1 ? `
+                  <div style="text-align:right">
+                    <div style="font-size:0.68rem;color:var(--text-tertiary)">${fmtMoney(g.unitCost)} × ${g.items.length}</div>
+                    <div style="font-family:var(--font-mono);font-size:0.82rem;font-weight:700;color:var(--text-secondary)">${fmtMoney(gSubtotal)}</div>
+                  </div>` : ''}
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    return `<div style="background:var(--bg-card);border:1px solid var(--border);border-left:3px solid var(--info);border-radius:12px;margin-bottom:0.65rem;overflow:hidden;box-shadow:var(--shadow-xs)">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;padding:0.7rem 1rem;background:var(--info-light);border-bottom:1px solid #bfdbfe;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:0.65rem;min-width:0">
+          <div style="width:32px;height:32px;border-radius:8px;background:#dbeafe;border:1px solid #bfdbfe;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0">📦</div>
+          <div>
+            <div style="font-weight:700;font-size:0.88rem;color:var(--info)">Purchased Stock</div>
+            <div style="font-size:0.71rem;color:var(--info);opacity:0.75;margin-top:1px">
+              🏪 ${first.supplierName || first.workerName}${first.billno ? ` · Bill #${first.billno}` : ''} · 📅 ${fmtDate(first.date)}
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.4rem;flex-shrink:0;flex-wrap:wrap">
+          ${soldCount > 0 ? `<span class="badge badge-success" style="font-size:0.7rem">${soldCount} sold</span>` : ''}
+          ${unsoldItems.length > 0 ? `<span style="font-size:0.7rem;font-weight:600;padding:0.2rem 0.55rem;border-radius:99px;background:#dbeafe;color:var(--info);border:1px solid #bfdbfe">${unsoldItems.length} ready</span>` : ''}
+          <span style="font-size:0.7rem;color:var(--info);opacity:0.65;font-family:var(--font-mono)">${items.length} pc${items.length > 1 ? 's' : ''} · ${groups.length} type${groups.length > 1 ? 's' : ''}</span>
+        </div>
+      </div>
+
+      <div>${productLines}</div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 1rem;background:var(--bg-secondary);border-top:1px solid var(--border-light);flex-wrap:wrap;gap:0.5rem">
+        <div style="display:flex;align-items:center;gap:0.5rem">
+          ${firstUnsold ? `<button class="btn btn-primary btn-sm" onclick="openSalesModal('${firstUnsold.id}')">🧾 Sell</button>` : `<span class="badge badge-success">All Sold</span>`}
+          <button class="act-btn danger" style="font-size:0.75rem" onclick="deletePfgBatch('${first.pfgBatchId}')">🗑 Delete Batch</button>
+        </div>
+        ${batchTotal > 0 ? `
+          <div style="display:flex;align-items:center;gap:0.6rem">
+            <span style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-light);font-weight:700">Batch Total</span>
+            <span style="font-family:var(--font-mono);font-size:0.95rem;font-weight:700;color:var(--text-primary)">${fmtMoney(batchTotal)}</span>
+          </div>` : ''}
+      </div>
+
+      ${first.notes ? `<div style="padding:0.4rem 1rem;background:var(--amber-pale);border-top:1px solid var(--amber-light);font-size:0.75rem;color:var(--amber-dark);font-style:italic">💬 ${first.notes}</div>` : ''}
+    </div>`;
+  }
+
+  // Render individual (non-batch) FG card
+  function renderSingleFgCard(f) {
+    const matCost = parseFloat(f.matCostPerPiece || 0);
+    const ohCost = parseFloat(f.ohCostPerPiece || 0);
+    const mainW = parseFloat(f.mainWage || f.totalWage || 0);
+    const subW = parseFloat(f.subWorkersWage || 0);
+    const polishW = parseFloat(f.polishWage || 0);
+    const polishJob = f.polishJobId ? DB.find('polishJobs', f.polishJobId) : null;
+    const polishMatCost = polishJob
+      ? (polishJob.materialsUsed || []).reduce((s, u) => {
+          const m = DB.all('materials').find(m => m.name === u.mat);
+          return s + parseFloat(u.qtyPerPiece || u.qty || 0) * parseFloat(m?.unitCost || 0);
+        }, 0)
+      : 0;
+    const polishSubW = polishJob
+      ? (parseFloat(polishJob.subWageTotal || 0) || (polishJob.subWorkers || []).reduce((s, sw) => s + parseFloat(sw.totalWage || 0), 0)) / ((polishJob.items || []).length || 1)
+      : 0;
+    const totalRawMat = matCost + polishMatCost;
+    const totalWages = mainW + subW + polishW + polishSubW;
+    const totalCost = totalRawMat + ohCost + totalWages;
+    const isAwaitingPolish = f.polishStatus === 'pending' && !f.sold;
+    const isReadyToSell = f.polishStatus === 'done' && !f.sold;
+    const matsJson = JSON.stringify(f.materialsUsed || []).replace(/"/g, '&quot;');
+    const matCount = (f.materialsUsed || []).length;
+
+    return `<div class="fg-card2 ${isAwaitingPolish ? 'fg-awaiting' : isReadyToSell ? 'fg-ready' : f.sold ? 'fg-sold' : ''}">
+      <div class="fg2-top">
+        <div class="fg2-icon ${isAwaitingPolish ? 'icon-amber' : isReadyToSell ? 'icon-green' : 'icon-gray'}">
+          ${isAwaitingPolish ? '🎨' : isReadyToSell ? '✨' : '🪑'}
+        </div>
+        <div class="fg2-main">
+          <div class="fg2-product">${f.product}</div>
+          <div class="fg2-serial">📟 ${f.serialNumber || '—'}</div>
+          <div class="fg2-meta">
+            <span class="fg2-chip">👷 ${f.workerName}</span>
+            <span class="fg2-chip">📅 ${fmtDate(f.date)}</span>
+            ${f.sold
+              ? `<span class="fg2-status fg2-sold">Sold</span>`
+              : isReadyToSell
+                ? `<span class="fg2-status fg2-ready">✨ Ready to Sell</span>`
+                : `<span class="fg2-status fg2-pending">🎨 Awaiting Polish</span>`}
+          </div>
+        </div>
+        <div class="fg2-actions">
+          ${!f.sold && isReadyToSell
+            ? `<button class="btn btn-primary btn-sm" onclick="openSalesModal('${f.id}')">🧾 Sell</button>`
+            : !f.sold && isAwaitingPolish
+              ? `<button class="btn btn-ghost btn-sm" style="cursor:not-allowed;opacity:.5" disabled>🔒 Sell</button>`
+              : ''}
+          ${matCount > 0
+            ? `<button class="btn btn-ghost btn-sm fg2-mat-btn" onclick="openMatPopup('${f.id}',this)" data-mats="${matsJson}">
+                📦 Materials <span class="fg2-mat-count">${matCount}</span>
+               </button>`
+            : ''}
+          <button class="act-btn danger" onclick="deleteFG('${f.id}')">🗑</button>
+        </div>
+      </div>
+      <div class="fg2-costs">
+        ${totalRawMat > 0 ? `<div class="fg2-cost-item"><span class="fg2-cost-lbl">Raw Mat.</span><span class="fg2-cost-val amber">${fmtMoney(totalRawMat)}</span></div>` : ''}
+        ${ohCost > 0 ? `<div class="fg2-cost-item"><span class="fg2-cost-lbl">Overhead</span><span class="fg2-cost-val info">${fmtMoney(ohCost)}</span></div>` : ''}
+        ${totalWages > 0 ? `<div class="fg2-cost-item"><span class="fg2-cost-lbl">Wages</span><span class="fg2-cost-val">${fmtMoney(totalWages)}</span></div>` : ''}
+        ${totalCost > 0 ? `<div class="fg2-cost-item fg2-cost-total"><span class="fg2-cost-lbl">Total Cost</span><span class="fg2-cost-val">${fmtMoney(totalCost)}</span></div>` : ''}
+        ${isAwaitingPolish ? `<div style="margin-left:auto"><button class="btn btn-sm" style="background:var(--amber);color:#fff;font-size:0.72rem" onclick="openPolishModal(null)">🎨 Assign Polish</button></div>` : ''}
+      </div>
+    </div>`;
+  }
+
   list.innerHTML = (summaryRows.length ? `
     <div class="card" style="margin-bottom:1.2rem">
       <div class="card-hdr"><span class="card-title">📊 Product Summary</span></div>
       <div class="card-body" style="padding:0">
         <table class="data-table">
-          <thead><tr><th>Product</th><th style="text-align:center">Total</th><th style="text-align:center">Await Polish</th><th style="text-align:center">Ready</th><th style="text-align:center">Sold</th><th style="text-align:right">Mat. Cost</th></tr></thead>
+          <thead><tr><th>Product</th><th style="text-align:center">Total</th><th style="text-align:center">Await Polish</th><th style="text-align:center">Ready</th><th style="text-align:center">Sold</th></tr></thead>
           <tbody>${summaryRows.map(p => `<tr>
             <td class="td-name">${p.name}</td>
             <td class="td-mono" style="text-align:center"><strong>${p.total}</strong></td>
             <td class="td-mono" style="text-align:center;color:var(--amber)">${p.awaitPolish}</td>
             <td class="td-mono" style="text-align:center;color:var(--info)">${p.readyToSell}</td>
             <td class="td-mono" style="text-align:center;color:var(--success)">${p.sold}</td>
-            <td class="td-mono" style="text-align:right;color:var(--amber-dark)">${fmtMoney(p.matCost)}</td>
           </tr>`).join('')}</tbody>
         </table>
       </div>
     </div>` : '') +
-    (fl.length ? fl.map(f => {
-      const matCost = parseFloat(f.matCostPerPiece || 0);
-      const ohCost = parseFloat(f.ohCostPerPiece || 0);
-      const mainW = parseFloat(f.mainWage || f.totalWage || 0);
-      const subW = parseFloat(f.subWorkersWage || 0);
-      const polishW = parseFloat(f.polishWage || 0);
-      const polishJob = f.polishJobId ? DB.find('polishJobs', f.polishJobId) : null;
-      const polishMatCost = polishJob
-        ? (polishJob.materialsUsed || []).reduce((s, u) => {
-          const m = DB.all('materials').find(m => m.name === u.mat);
-          return s + parseFloat(u.qtyPerPiece || u.qty || 0) * parseFloat(m?.unitCost || 0);
-        }, 0)
-        : 0;
-      const polishSubW = polishJob
-        ? (parseFloat(polishJob.subWageTotal || 0) || (polishJob.subWorkers || []).reduce((s, sw) => s + parseFloat(sw.totalWage || 0), 0)) / ((polishJob.items || []).length || 1)
-        : 0;
-      const totalRawMat = matCost + polishMatCost;
-      const totalWages = mainW + subW + polishW + polishSubW;
-      const totalCost = totalRawMat + ohCost + totalWages; const isAwaitingPolish = f.polishStatus === 'pending' && !f.sold;
-      const isReadyToSell = f.polishStatus === 'done' && !f.sold;
-
-      const matsJson = JSON.stringify(f.materialsUsed || []).replace(/"/g, '&quot;');
-      const matCount = (f.materialsUsed || []).length;
-
-      return `<div class="fg-card2 ${isAwaitingPolish ? 'fg-awaiting' : isReadyToSell ? 'fg-ready' : f.sold ? 'fg-sold' : ''}">
-
-    <div class="fg2-top">
-      <div class="fg2-icon ${isAwaitingPolish ? 'icon-amber' : isReadyToSell ? 'icon-green' : 'icon-gray'}">
-        ${isAwaitingPolish ? '🎨' : isReadyToSell ? '✨' : '🪑'}
-      </div>
-
-      <div class="fg2-main">
-        <div class="fg2-product">${f.product}</div>
-        <div class="fg2-serial">📟 ${f.serialNumber || '—'}</div>
-        <div class="fg2-meta">
-          <span class="fg2-chip">👷 ${f.workerName}</span>
-          <span class="fg2-chip">📅 ${fmtDate(f.date)}</span>
-          ${f.sold
-          ? `<span class="fg2-status fg2-sold">Sold</span>`
-          : isReadyToSell
-            ? `<span class="fg2-status fg2-ready">✨ Ready to Sell</span>`
-            : `<span class="fg2-status fg2-pending">🎨 Awaiting Polish</span>`}
-        </div>
-      </div>
-
-      <div class="fg2-actions">
-        ${!f.sold && isReadyToSell
-          ? `<button class="btn btn-primary btn-sm" onclick="openSalesModal('${f.id}')">🧾 Sell</button>`
-          : !f.sold && isAwaitingPolish
-            ? `<button class="btn btn-ghost btn-sm" style="cursor:not-allowed;opacity:.5" disabled>🔒 Sell</button>`
-            : ''}
-        ${matCount > 0
-          ? `<button class="btn btn-ghost btn-sm fg2-mat-btn" onclick="openMatPopup('${f.id}',this)" data-mats="${matsJson}">
-              📦 Materials <span class="fg2-mat-count">${matCount}</span>
-             </button>`
-          : ''}
-        <button class="act-btn danger" onclick="deleteFG('${f.id}')">🗑</button>
-      </div>
-    </div>
-
-    <div class="fg2-costs">
-      ${totalRawMat > 0 ? `<div class="fg2-cost-item">
-        <span class="fg2-cost-lbl">Raw Mat.</span>
-        <span class="fg2-cost-val amber" title="Carpentry: ${fmtMoney(matCost)}${polishMatCost > 0 ? ' · Polish: ' + fmtMoney(polishMatCost) : ''}">${fmtMoney(totalRawMat)}</span>
-      </div>` : ''}
-      ${ohCost > 0 ? `<div class="fg2-cost-item"><span class="fg2-cost-lbl">Overhead</span><span class="fg2-cost-val info">${fmtMoney(ohCost)}</span></div>` : ''}
-      ${totalWages > 0 ? `<div class="fg2-cost-item">
-        <span class="fg2-cost-lbl">Wages</span>
-        <span class="fg2-cost-val" title="Carpentry: ${fmtMoney(mainW + subW)}${polishW + polishSubW > 0 ? ' · Polish: ' + fmtMoney(polishW + polishSubW) : ''}">${fmtMoney(totalWages)}</span>
-      </div>` : ''}
-      ${totalCost > 0 ? `<div class="fg2-cost-item fg2-cost-total"><span class="fg2-cost-lbl">Total Cost</span><span class="fg2-cost-val">${fmtMoney(totalCost)}</span></div>` : ''} ${isAwaitingPolish ? `<div style="margin-left:auto"><button class="btn btn-sm" style="background:var(--amber);color:#fff;font-size:0.72rem" onclick="openPolishModal(null)">🎨 Assign Polish</button></div>` : ''}
-    </div>
-
-  </div>`;
-    }).join('') : `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">✅</span>${fin.length ? 'No results' : 'No finished goods yet'}</div></div>`);
+    (fl.length
+      ? Object.entries(pfgBatchMap).map(([, items]) => renderPfgBatchCard(items)).join('') +
+        nonBatchItems.map(f => renderSingleFgCard(f)).join('')
+      : `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">✅</span>${fin.length ? 'No results' : 'No finished goods yet'}</div></div>`);
 } function deleteFG(id) { if (!confirm('Delete this record?')) return; DB.delete('finished', id); renderFinished(); updateCounts(); toast('Deleted', 'warning'); }
+function deletePfgBatch(batchId) {
+  const items = DB.where('finished', f => f.pfgBatchId === batchId);
+  const soldCount = items.filter(f => f.sold).length;
+  if (soldCount > 0) { toast(`Cannot delete — ${soldCount} item(s) already sold`, 'danger'); return; }
+  if (!confirm(`Delete all ${items.length} item(s) in this purchased stock batch?`)) return;
+  items.forEach(f => DB.delete('finished', f.id));
+  renderFinished(); updateCounts(); toast('Batch deleted', 'warning');
+}
 
 /* ═══════════ SALES ═══════════ */
 let _cartItems = [], _editSaleId = null;
@@ -3387,6 +3665,63 @@ function createModals() {
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('modal-sales')">Cancel</button><button class="btn btn-primary" id="sl-save">🧾 Save Bill</button></div>
   </div>
 </div>
+<div class="modal-backdrop" id="modal-purchased-fg">
+    <div class="modal modal-lg">
+      <div class="modal-hdr">
+        <div>
+          <h3 class="modal-title">📦 Add Purchased Stock</h3>
+          <p class="modal-sub">Externally sourced goods — added directly to Finished Goods as ready to sell</p>
+        </div>
+        <button class="modal-close" onclick="closeModal('modal-purchased-fg')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="approve-section">
+          <p class="section-label">Supplier Details</p>
+          <div class="form-row three">
+            <div class="field-group">
+              <label>Supplier Name *</label>
+              <div class="combo-wrap">
+                <input class="finput" id="pfg-supplier" type="text" placeholder="Supplier name" autocomplete="off"/>
+                <div class="combo-drop" id="pfg-supplier-drop"></div>
+              </div>
+            </div>
+            <div class="field-group">
+              <label>Bill No.</label>
+              <input class="finput" id="pfg-billno" type="text" placeholder="INV-001"/>
+            </div>
+            <div class="field-group">
+              <label>Date *</label>
+              <input class="finput" id="pfg-date" type="date"/>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field-group fg-full">
+              <label>Notes</label>
+              <input class="finput" id="pfg-notes" type="text" placeholder="Optional notes…"/>
+            </div>
+          </div>
+        </div>
+        <div class="approve-section">
+          <p class="section-label">Items</p>
+          <div style="display:grid;grid-template-columns:1fr 80px 120px 28px;gap:0.4rem;padding:0.3rem 0;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-tertiary);margin-bottom:0.2rem">
+            <span>Product Name</span><span>Qty</span><span>Purchase Price ₹</span><span></span>
+          </div>
+          <div id="pfg-rows-wrap">
+            <div class="sup-empty-hint">No items yet — click "+ Add Row"</div>
+          </div>
+          <button class="add-row-btn" id="pfg-add-row">+ Add Row</button>
+          <div class="banner banner-info" style="margin-top:0.6rem;font-size:0.77rem">
+            <span class="banner-ico">ℹ️</span>
+            <div>Each unit gets a unique auto-generated serial number. Items are marked <strong>polished / ready to sell</strong> immediately.</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="closeModal('modal-purchased-fg')">Cancel</button>
+        <button class="btn btn-primary" id="pfg-save">📦 Add to Finished Goods</button>
+      </div>
+    </div>
+  </div>
     `;
   document.querySelectorAll('.modal-backdrop').forEach(el => el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); }));
 
