@@ -2319,9 +2319,11 @@ function openPurchasedFGModal() {
   document.getElementById('pfg-notes').value = '';
   document.getElementById('pfg-rows-wrap').innerHTML =
     '<div class="sup-empty-hint">No items yet — click "+ Add Row"</div>';
-
   buildCombo('pfg-supplier', 'pfg-supplier-drop',
-    [...new Set(DB.all('bills').map(b => b.supplier).filter(Boolean))]);
+    [...new Set([
+      ...DB.all('bills').map(b => b.supplier),
+      ...DB.all('finished').filter(f => f.purchasedStock && f.supplierName).map(f => f.supplierName)
+    ].filter(Boolean))]);
 
   const addBtn = document.getElementById('pfg-add-row');
   const fresh = addBtn.cloneNode(true); addBtn.parentNode.replaceChild(fresh, addBtn);
