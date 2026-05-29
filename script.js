@@ -2339,7 +2339,7 @@ function _pfgAddRow() {
   const hint = wrap.querySelector('.sup-empty-hint');
   if (hint) hint.remove();
   const i = _pfgRowCount++;
-  _pfgRows[i] = { name: '', qty: 1, cost: 0, serials: [] };
+  _pfgRows[i] = { name: '', qty: 1, cost: 0 };
   const div = document.createElement('div');
   div.className = 'bill-row-wrap'; div.id = `pfg-wrap-${i}`;
   div.innerHTML = `
@@ -2354,30 +2354,13 @@ function _pfgAddRow() {
         <input class="finput" id="pfg-cost-${i}" type="number" min="0" step="0.01" placeholder="0.00" style="padding-left:1.5rem"/>
       </div>
       <button class="row-del" onclick="pfgDelRow(${i})">×</button>
-    </div>
-    <div id="pfg-serials-${i}" style="padding:0.3rem 0 0.5rem;margin-bottom:0.4rem;border-bottom:1px dashed var(--border-light)">
-      <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--amber-dark);margin-bottom:0.4rem">Serial Numbers</div>
-      <div id="pfg-sn-rows-${i}"></div>
     </div>`;
   wrap.appendChild(div);
-
   const existingProducts = [...new Set(DB.all('finished').map(f => f.product).filter(Boolean))];
-  buildCombo(`pfg-name-${i}`, `pfg-name-drop-${i}`, existingProducts,
-    val => { _pfgRows[i].name = val; });
-
-  document.getElementById(`pfg-name-${i}`).addEventListener('input',
-    e => { _pfgRows[i].name = e.target.value; });
-
-  const qtyEl = document.getElementById(`pfg-qty-${i}`);
-  qtyEl.addEventListener('input', e => {
-    _pfgRows[i].qty = parseInt(e.target.value) || 1;
-    _pfgRenderSnRows(i);
-  });
-
-  document.getElementById(`pfg-cost-${i}`).addEventListener('input',
-    e => { _pfgRows[i].cost = parseFloat(e.target.value) || 0; });
-
-  _pfgRenderSnRows(i);
+  buildCombo(`pfg-name-${i}`, `pfg-name-drop-${i}`, existingProducts, val => { _pfgRows[i].name = val; });
+  document.getElementById(`pfg-name-${i}`).addEventListener('input', e => { _pfgRows[i].name = e.target.value; });
+  document.getElementById(`pfg-qty-${i}`).addEventListener('input', e => { _pfgRows[i].qty = parseInt(e.target.value) || 1; });
+  document.getElementById(`pfg-cost-${i}`).addEventListener('input', e => { _pfgRows[i].cost = parseFloat(e.target.value) || 0; });
   setTimeout(() => document.getElementById(`pfg-name-${i}`)?.focus(), 50);
 }
 function _pfgRenderSnRows(i) {
@@ -2417,62 +2400,45 @@ function pfgDelRow(i) {
 
 function savePurchasedFG() {
   const supplier = document.getElementById('pfg-supplier').value.trim();
-  const date     = document.getElementById('pfg-date').value;
-  const billno   = document.getElementById('pfg-billno').value.trim();
-  const notes    = document.getElementById('pfg-notes').value.trim();
+  const date = document.getElementById('pfg-date').value;
+  const billno = document.getElementById('pfg-billno').value.trim();
+  const notes = document.getElementById('pfg-notes').value.trim();
 
   if (!supplier) { toast('Supplier name required', 'danger'); return; }
-  if (!date)     { toast('Select a date', 'danger'); return; }
+  if (!date) { toast('Select a date', 'danger'); return; }
 
   const valid = _pfgRows.filter(r => r && r.name && (parseInt(r.qty) || 1) >= 1);
   if (!valid.length) { toast('Add at least one product row', 'danger'); return; }
 
-  // Collect and validate serial numbers from DOM
-  const rowSerials = [];
-  for (let ri = 0; ri < _pfgRowCount; ri++) {
-    if (!_pfgRows[ri]) continue;
-    const qty = parseInt(document.getElementById(`pfg-qty-${ri}`)?.value) || 1;
-    const snInputs = [...document.querySelectorAll(`#pfg-sn-rows-${ri} .pfg-sn-input`)].map(el => el.value.trim());
-    const serials = snInputs.slice(0, qty);
-    if (serials.filter(s => !s).length) { toast(`Enter all serial numbers for "${_pfgRows[ri].name}"`, 'danger'); return; }
-    if (new Set(serials).size !== serials.length) { toast(`Duplicate serial numbers in "${_pfgRows[ri].name}"`, 'danger'); return; }
-    const usedAlready = serials.filter(s => !DB.isSerialUnique(s));
-    if (usedAlready.length) { toast(`Already used: ${usedAlready.join(', ')}`, 'danger'); return; }
-    rowSerials.push({ ri, serials });
-  }
-  // Cross-row duplicate check
-  const allSerials = rowSerials.flatMap(r => r.serials);
-  if (new Set(allSerials).size !== allSerials.length) { toast('Duplicate serial numbers across rows', 'danger'); return; }
-
   const batchId = DB.uid();
   let totalCreated = 0;
 
-  rowSerials.forEach(({ ri, serials }) => {
-    const r = _pfgRows[ri];
-    const unitCost = parseFloat(document.getElementById(`pfg-cost-${ri}`)?.value) || 0;
-    serials.forEach(sn => {
+  valid.forEach(r => {
+    const qty = parseInt(document.getElementById(`pfg-qty-${_pfgRows.indexOf(r)}`)?.value) || 1;
+    const unitCost = parseFloat(document.getElementById(`pfg-cost-${_pfgRows.indexOf(r)}`)?.value) || 0;
+    for (let j = 0; j < qty; j++) {
       DB.insert('finished', {
-        product:        r.name,
-        serialNumber:   sn,
+        product: r.name,
+        serialNumber: null,
         date,
-        workerName:     supplier,
-        workerId:       null,
-        productionId:   null,
-        pfgBatchId:     batchId,
+        workerName: supplier,
+        workerId: null,
+        productionId: null,
+        pfgBatchId: batchId,
         matCostPerPiece: unitCost,
         ohCostPerPiece: 0,
-        totalWage:      0,
-        subWorkers:     [],
-        materialsUsed:  [],
-        polishStatus:   'done',
-        sold:           false,
+        totalWage: 0,
+        subWorkers: [],
+        materialsUsed: [],
+        polishStatus: 'done',
+        sold: false,
         purchasedStock: true,
-        supplierName:   supplier,
+        supplierName: supplier,
         billno,
         notes
       });
       totalCreated++;
-    });
+    }
   });
 
   closeModal('modal-purchased-fg');
@@ -2551,13 +2517,11 @@ function renderFinished() {
             <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem">
               <div style="flex:1;min-width:0">
                 <div style="font-weight:700;font-size:0.87rem;color:var(--text-primary);margin-bottom:0.35rem">${g.product}</div>
-                <div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-bottom:0.4rem">
-                  ${g.items.map(f => `<span style="display:inline-block;font-family:var(--font-mono);font-size:0.7rem;padding:0.12rem 0.45rem;border-radius:5px;border:1px solid ${f.sold ? 'var(--border-light)' : 'var(--border)'};background:${f.sold ? 'transparent' : 'var(--bg-secondary)'};color:${f.sold ? 'var(--text-light)' : 'var(--text-secondary)'};${f.sold ? 'text-decoration:line-through' : ''}">${f.serialNumber}</span>`).join('')}
+                <div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-bottom:0.4rem"><div style="font-size:0.72rem;color:var(--text-tertiary)">${g.items.length} pc${g.items.length > 1 ? 's' : ''}${gSold > 0 ? ` · ${gSold} sold` : ''}</div>
                 </div>
                 <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
-                  <span style="font-size:0.72rem;color:var(--text-tertiary)">${g.items.length} pc${g.items.length > 1 ? 's' : ''}</span>
-                  ${gSold > 0 ? `<span style="font-size:0.72rem;color:var(--text-tertiary)">·</span><span class="badge badge-success" style="font-size:0.62rem">${gSold} sold</span>` : ''}
-                </div>
+  ${gSold > 0 ? `<span class="badge badge-success" style="font-size:0.62rem">${gSold} sold</span>` : ''}
+</div>
               </div>
 
               <div style="flex-shrink:0;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:0.35rem">
@@ -2624,9 +2588,9 @@ function renderFinished() {
     const polishJob = f.polishJobId ? DB.find('polishJobs', f.polishJobId) : null;
     const polishMatCost = polishJob
       ? (polishJob.materialsUsed || []).reduce((s, u) => {
-          const m = DB.all('materials').find(m => m.name === u.mat);
-          return s + parseFloat(u.qtyPerPiece || u.qty || 0) * parseFloat(m?.unitCost || 0);
-        }, 0)
+        const m = DB.all('materials').find(m => m.name === u.mat);
+        return s + parseFloat(u.qtyPerPiece || u.qty || 0) * parseFloat(m?.unitCost || 0);
+      }, 0)
       : 0;
     const polishSubW = polishJob
       ? (parseFloat(polishJob.subWageTotal || 0) || (polishJob.subWorkers || []).reduce((s, sw) => s + parseFloat(sw.totalWage || 0), 0)) / ((polishJob.items || []).length || 1)
@@ -2651,23 +2615,23 @@ function renderFinished() {
             <span class="fg2-chip">👷 ${f.workerName}</span>
             <span class="fg2-chip">📅 ${fmtDate(f.date)}</span>
             ${f.sold
-              ? `<span class="fg2-status fg2-sold">Sold</span>`
-              : isReadyToSell
-                ? `<span class="fg2-status fg2-ready">✨ Ready to Sell</span>`
-                : `<span class="fg2-status fg2-pending">🎨 Awaiting Polish</span>`}
+        ? `<span class="fg2-status fg2-sold">Sold</span>`
+        : isReadyToSell
+          ? `<span class="fg2-status fg2-ready">✨ Ready to Sell</span>`
+          : `<span class="fg2-status fg2-pending">🎨 Awaiting Polish</span>`}
           </div>
         </div>
         <div class="fg2-actions">
           ${!f.sold && isReadyToSell
-            ? `<button class="btn btn-primary btn-sm" onclick="openSalesModal('${f.id}')">🧾 Sell</button>`
-            : !f.sold && isAwaitingPolish
-              ? `<button class="btn btn-ghost btn-sm" style="cursor:not-allowed;opacity:.5" disabled>🔒 Sell</button>`
-              : ''}
+        ? `<button class="btn btn-primary btn-sm" onclick="openSalesModal('${f.id}')">🧾 Sell</button>`
+        : !f.sold && isAwaitingPolish
+          ? `<button class="btn btn-ghost btn-sm" style="cursor:not-allowed;opacity:.5" disabled>🔒 Sell</button>`
+          : ''}
           ${matCount > 0
-            ? `<button class="btn btn-ghost btn-sm fg2-mat-btn" onclick="openMatPopup('${f.id}',this)" data-mats="${matsJson}">
+        ? `<button class="btn btn-ghost btn-sm fg2-mat-btn" onclick="openMatPopup('${f.id}',this)" data-mats="${matsJson}">
                 📦 Materials <span class="fg2-mat-count">${matCount}</span>
                </button>`
-            : ''}
+        : ''}
           <button class="act-btn danger" onclick="deleteFG('${f.id}')">🗑</button>
         </div>
       </div>
@@ -2699,7 +2663,7 @@ function renderFinished() {
     </div>` : '') +
     (fl.length
       ? Object.entries(pfgBatchMap).map(([, items]) => renderPfgBatchCard(items)).join('') +
-        nonBatchItems.map(f => renderSingleFgCard(f)).join('')
+      nonBatchItems.map(f => renderSingleFgCard(f)).join('')
       : `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">✅</span>${fin.length ? 'No results' : 'No finished goods yet'}</div></div>`);
 } function deleteFG(id) { if (!confirm('Delete this record?')) return; DB.delete('finished', id); renderFinished(); updateCounts(); toast('Deleted', 'warning'); }
 function deletePfgBatch(batchId) {
@@ -2799,7 +2763,7 @@ function _onProductSearch() {
   });
 
   const byProduct = unsold.filter(f => f.product.toLowerCase().includes(q));
-  const bySerial = unsold.filter(f => f.serialNumber.toLowerCase().includes(q) && !byProduct.find(p => p.id === f.id));
+  const bySerial = unsold.filter(f => f.serialNumber && f.serialNumber.toLowerCase().includes(q) && !byProduct.find(p => p.id === f.id));
   const results = [...byProduct, ...bySerial];
 
   if (availEl) {
@@ -2933,31 +2897,31 @@ function renderSales() {
     (sl.serialNumber || '').toLowerCase().includes(search) ||
     (sl.buyerName || '').toLowerCase().includes(search)
   );
- 
+
   const statsEl = document.getElementById('sales-stats');
   if (statsEl) statsEl.innerHTML = `
     <div class="stat-card"><span class="sc-ico">🧾</span><div class="sc-lbl">Bills</div><div class="sc-val">${allSales.length}</div></div>
     <div class="stat-card"><span class="sc-ico">🏪</span><div class="sc-lbl">Shops</div><div class="sc-val">${allSales.filter(s => s.buyerType === 'Shop').length}</div></div>
     <div class="stat-card"><span class="sc-ico">👤</span><div class="sc-lbl">Customers</div><div class="sc-val">${allSales.filter(s => s.buyerType === 'Customer').length}</div></div>
     <div class="stat-card"><span class="sc-ico">📦</span><div class="sc-lbl">Items Sold</div><div class="sc-val">${allSales.reduce((s, sl) => s + (sl.items?.length || 1), 0)}</div></div>`;
- 
+
   const listEl = document.getElementById('sales-list'); if (!listEl) return;
- 
+
   if (!allSales.length) { listEl.innerHTML = `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">🧾</span>No sales bills yet</div></div>`; return; }
-  if (!sales.length)    { listEl.innerHTML = `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">🔍</span>No results</div></div>`; return; }
- 
+  if (!sales.length) { listEl.innerHTML = `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">🔍</span>No results</div></div>`; return; }
+
   listEl.innerHTML = sales.map(sl => {
     const items = sl.items || [{ product: sl.product, serialNumber: sl.serialNumber, workerName: sl.workerName || '' }];
- 
+
     // Group by product name
     const grouped = {};
     items.forEach(it => {
       if (!grouped[it.product]) grouped[it.product] = [];
       grouped[it.product].push(it);
     });
- 
+
     const buyerIcon = sl.buyerType === 'Shop' ? '🏪' : '👤';
- 
+
     return `<div class="sl-card">
  
       <!-- Bill header -->
@@ -3032,7 +2996,7 @@ function printSalesBill(id) {
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Invoice — ${sl.billno || sl.id.slice(0,8).toUpperCase()}</title>
+<title>Invoice — ${sl.billno || sl.id.slice(0, 8).toUpperCase()}</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet"/>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
@@ -3215,8 +3179,8 @@ function printSalesBill(id) {
     </div>
     <div class="invoice-meta">
       <div class="invoice-label">Sales Invoice</div>
-      <div class="invoice-number">${sl.billno ? '#' + sl.billno : '#' + sl.id.slice(0,8).toUpperCase()}</div>
-      <div class="invoice-date">${new Date(sl.date + 'T12:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})}</div>
+      <div class="invoice-number">${sl.billno ? '#' + sl.billno : '#' + sl.id.slice(0, 8).toUpperCase()}</div>
+      <div class="invoice-date">${new Date(sl.date + 'T12:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
     </div>
   </div>
 
@@ -3224,12 +3188,12 @@ function printSalesBill(id) {
   <div class="meta-strip">
     <div class="meta-cell">
       <div class="meta-cell-label">Invoice Date</div>
-      <div class="meta-cell-value">${new Date(sl.date + 'T12:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>
+      <div class="meta-cell-value">${new Date(sl.date + 'T12:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
       <div class="meta-cell-sub">${items.length} item${items.length > 1 ? 's' : ''} · ${Object.keys(grouped).length} product type${Object.keys(grouped).length > 1 ? 's' : ''}</div>
     </div>
     <div class="meta-cell">
       <div class="meta-cell-label">Amount Due</div>
-      <div class="meta-cell-value" style="font-size:18px;color:#059669">₹${totalAmount.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+      <div class="meta-cell-value" style="font-size:18px;color:#059669">₹${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
       ${sl.taxPct > 0 ? `<div class="meta-cell-sub">Incl. ${sl.taxPct}% tax</div>` : '<div class="meta-cell-sub">No tax applied</div>'}
     </div>
   </div>
@@ -3256,15 +3220,15 @@ function printSalesBill(id) {
   <div class="items-section">
     <div class="items-title">Products Sold</div>
     ${Object.entries(grouped).map(([productName, productItems]) => {
-      const groupSubtotal = productItems.reduce((s, it) => s + parseFloat(it.price || 0), 0);
-      const unitPrice = productItems.length > 0 ? parseFloat(productItems[0].price || 0) : 0;
-      const allSamePrice = productItems.every(it => parseFloat(it.price || 0) === unitPrice);
-      return `<div class="product-group">
+    const groupSubtotal = productItems.reduce((s, it) => s + parseFloat(it.price || 0), 0);
+    const unitPrice = productItems.length > 0 ? parseFloat(productItems[0].price || 0) : 0;
+    const allSamePrice = productItems.every(it => parseFloat(it.price || 0) === unitPrice);
+    return `<div class="product-group">
         <div class="product-group-hdr">
           <span class="product-group-name">${productName}</span>
           <span class="product-group-meta">
             <span>${productItems.length} pc${productItems.length > 1 ? 's' : ''}</span>
-            <span style="font-weight:700;color:#fff">₹${groupSubtotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+            <span style="font-weight:700;color:#fff">₹${groupSubtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </span>
         </div>
         <div class="product-group-body">
@@ -3272,12 +3236,12 @@ function printSalesBill(id) {
             ${productItems.map(it => `<span class="sn-chip">${it.serialNumber || '—'}</span>`).join('')}
           </div>
           <div class="group-price-row">
-            <span class="gpr-unit">${allSamePrice && productItems.length > 1 ? `₹${unitPrice.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})} × ${productItems.length} pcs` : productItems.length === 1 ? `Produced by ${productItems[0].workerName || '—'}` : `Mixed pricing · ${productItems.length} pcs`}</span>
-            <span class="gpr-subtotal">₹${groupSubtotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+            <span class="gpr-unit">${allSamePrice && productItems.length > 1 ? `₹${unitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} × ${productItems.length} pcs` : productItems.length === 1 ? `Produced by ${productItems[0].workerName || '—'}` : `Mixed pricing · ${productItems.length} pcs`}</span>
+            <span class="gpr-subtotal">₹${groupSubtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
         </div>
       </div>`;
-    }).join('')}
+  }).join('')}
   </div>
 
   <!-- TOTALS -->
@@ -3285,15 +3249,15 @@ function printSalesBill(id) {
     <div class="totals-box">
       <div class="totals-row">
         <span class="t-label">Subtotal (${items.length} item${items.length > 1 ? 's' : ''})</span>
-        <span class="t-value">₹${subtotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+        <span class="t-value">₹${subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
       </div>
       ${sl.taxPct > 0 ? `<div class="totals-row">
         <span class="t-label">GST / Tax (${sl.taxPct}%)</span>
-        <span class="t-value">₹${taxAmt.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+        <span class="t-value">₹${taxAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
       </div>` : ''}
       <div class="totals-row total-row">
         <span class="t-label">Total Amount</span>
-        <span class="t-value">₹${totalAmount.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+        <span class="t-value">₹${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
       </div>
     </div>
   </div>
