@@ -2768,54 +2768,66 @@ function _onProductSearch() {
   const bySerial = unsold.filter(f => f.serialNumber && f.serialNumber.toLowerCase().includes(q) && !byProduct.find(p => p.id === f.id));
   const results = [...byProduct, ...bySerial];
 
-  if (availEl) {
-    if (results.length > 0) {
-      const enough = results.length >= qty;
-      availEl.innerHTML = `<div style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;border-radius:99px;font-size:0.76rem;font-weight:600;background:${enough ? 'var(--success-light)' : 'var(--danger-light)'};color:${enough ? 'var(--success)' : 'var(--danger)'}">
-        ${enough ? '✓' : '⚠'} ${results.length} available · Requesting ${qty}${!enough ? ' — <strong>not enough</strong>' : ''}
-      </div>`;
-    } else { availEl.innerHTML = ''; }
-  }
-
   if (!results.length) {
-    const pendingMatch = DB.all('finished').filter(f => !f.sold && f.polishStatus === 'pending' && (f.product.toLowerCase().includes(q) || f.serialNumber.toLowerCase().includes(q)));
+    const pendingMatch = DB.all('finished').filter(f => !f.sold && f.polishStatus === 'pending' && (f.product.toLowerCase().includes(q) || (f.serialNumber || '').toLowerCase().includes(q)));
     if (pendingMatch.length) {
       resEl.innerHTML = `<div style="font-size:0.76rem;padding:0.5rem 0.75rem;background:var(--amber-pale);border:1px solid var(--amber-light);border-radius:8px;color:var(--amber-dark)">🎨 <strong>${pendingMatch.length} item(s) found but awaiting polish</strong> — complete polish job first.</div>`;
     } else {
       resEl.innerHTML = `<div style="font-size:0.76rem;color:var(--text-tertiary);padding:0.5rem 0">No polished products match "<em>${q}</em>"</div>`;
     }
+    if (availEl) availEl.innerHTML = '';
     return;
   }
 
+  // Group by product name for dropdown
   const grouped = {};
   results.forEach(f => { if (!grouped[f.product]) grouped[f.product] = []; grouped[f.product].push(f); });
 
-  resEl.innerHTML = Object.entries(grouped).map(([name, items]) => {
-    const canAddAll = qty <= items.length;
-    return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:0.6rem">
-      <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;padding:0.55rem 0.85rem;background:var(--bg-secondary);border-bottom:1px solid var(--border-light)">
-        <span style="font-weight:700;font-size:0.84rem;color:var(--text-primary);flex:1">${name}</span>
-        <span style="font-size:0.7rem;color:var(--text-tertiary);font-family:var(--font-mono)">${items.length} in stock</span>
-        ${canAddAll
-        ? `<button class="btn btn-primary btn-sm" onclick="_addQtyToCart('${name.replace(/'/g, "\\'")}',${qty})">+ Add ${qty}</button>`
-        : `<span style="font-size:0.7rem;color:var(--danger);background:var(--danger-light);padding:0.2rem 0.5rem;border-radius:99px">Only ${items.length} available</span>`}
-      </div>
-      <div style="padding:0.3rem 0">
-        ${items.slice(0, 15).map(fg => {
-          const ic = parseFloat(fg.matCostPerPiece || 0) + parseFloat(fg.ohCostPerPiece || 0) + parseFloat(fg.totalWage || 0) + parseFloat(fg.polishWage || 0);
-          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:0.45rem 0.85rem;transition:background 0.1s;gap:0.5rem" onmouseover="this.style.background='var(--amber-pale)'" onmouseout="this.style.background=''">
-            <div style="flex:1;min-width:0">
-              <span style="font-family:var(--font-mono);font-size:0.8rem;font-weight:600;color:var(--text-primary)">SN: ${fg.serialNumber}</span>
-              <span style="font-size:0.7rem;color:var(--text-tertiary);margin-left:0.5rem">👷 ${fg.workerName} · ${fmtDate(fg.date)}</span>
-              ${ic > 0 ? `<div style="font-size:0.69rem;color:var(--amber-dark);margin-top:1px">Cost: ${fmtMoney(ic)}</div>` : ''}
-            </div>
-            <button onclick="_addToCart_byId('${fg.id}')" style="background:var(--amber);color:#fff;border:none;border-radius:6px;width:28px;height:28px;font-size:1.1rem;font-weight:700;cursor:pointer;flex-shrink:0;transition:background 0.15s" onmouseover="this.style.background='var(--amber-dark)'" onmouseout="this.style.background='var(--amber)'">+</button>
-          </div>`;
-        }).join('')}
-        ${items.length > 15 ? `<div style="font-size:0.7rem;color:var(--text-light);text-align:center;padding:0.4rem;border-top:1px solid var(--border-light)">+${items.length - 15} more items</div>` : ''}
-      </div>
-    </div>`;
-  }).join('');
+  resEl.innerHTML = `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;overflow:hidden">` +
+    Object.entries(grouped).map(([name, items]) => {
+      const enough = items.length >= qty;
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 0.85rem;border-bottom:1px solid var(--border-light);cursor:pointer;transition:background 0.1s;gap:0.75rem"
+        onmouseover="this.style.background='var(--amber-pale)'"
+        onmouseout="this.style.background=''"
+        onclick="_selectProductFromSearch('${name.replace(/'/g, "\\'")}', ${qty})">
+        <div style="flex:1;min-width:0">
+          <span style="font-weight:700;font-size:0.88rem;color:var(--text-primary)">${name}</span>
+          <span style="font-size:0.72rem;color:var(--text-tertiary);margin-left:0.6rem;font-family:var(--font-mono)">${items.length} in stock</span>
+        </div>
+        <span style="font-size:0.72rem;font-weight:600;padding:0.2rem 0.6rem;border-radius:99px;flex-shrink:0;
+          background:${enough ? 'var(--success-light)' : 'var(--danger-light)'};
+          color:${enough ? 'var(--success)' : 'var(--danger)'}">
+          ${enough ? `+ Add ${qty}` : `Only ${items.length}`}
+        </span>
+      </div>`;
+    }).join('') + `</div>`;
+
+  if (availEl) availEl.innerHTML = '';
+}
+function _selectProductFromSearch(productName, qty) {
+  const unsold = DB.all('finished').filter(f => {
+    if (_cartItems.find(c => c.fgId === f.id)) return false;
+    if (f.polishStatus !== 'done' || f.sold) return false;
+    return f.product === productName;
+  });
+  const toAdd = unsold.slice(0, qty);
+  if (!toAdd.length) { toast('No items available', 'warning'); return; }
+  toAdd.forEach(fg => {
+    _cartItems.push({
+      fgId: fg.id, product: fg.product, serialNumber: fg.serialNumber,
+      workerName: fg.workerName, date: fg.date,
+      matCostPerPiece: parseFloat(fg.matCostPerPiece || 0),
+      ohCostPerPiece: parseFloat(fg.ohCostPerPiece || 0),
+      totalWage: parseFloat(fg.totalWage || 0) + parseFloat(fg.polishWage || 0),
+      price: 0
+    });
+  });
+  // Clear search
+  document.getElementById('fsl-prod-search').value = '';
+  document.getElementById('fsl-serial-results').innerHTML = '';
+  document.getElementById('fsl-avail-count').innerHTML = '';
+  _renderCart();
+  toast(`Added ${toAdd.length} × ${productName}`);
 }
 function _addQtyToCart(productName, qty) {
   const unsold = DB.all('finished').filter(f => {
@@ -2828,7 +2840,10 @@ function _addQtyToCart(productName, qty) {
   toAdd.forEach(fg => {
     _cartItems.push({ fgId: fg.id, product: fg.product, serialNumber: fg.serialNumber, workerName: fg.workerName, date: fg.date, matCostPerPiece: parseFloat(fg.matCostPerPiece || 0), ohCostPerPiece: parseFloat(fg.ohCostPerPiece || 0), totalWage: parseFloat(fg.totalWage || 0) + parseFloat(fg.polishWage || 0), price: 0 });
   });
-  _renderCart(); _onProductSearch();
+  _renderCart();
+  document.getElementById('fsl-prod-search').value = '';
+  document.getElementById('fsl-serial-results').innerHTML = '';
+  document.getElementById('fsl-avail-count').innerHTML = '';
   toast(`Added ${toAdd.length} × ${productName}`);
 } function _addToCart_byId(fgId) { const fg = DB.find('finished', fgId); if (fg) _addToCart(fg); }
 function _addToCart(fg) {
@@ -2842,30 +2857,59 @@ function _renderCart() {
   if (!wrap) return;
   if (cntEl) cntEl.textContent = _cartItems.length ? `(${_cartItems.length} item${_cartItems.length > 1 ? 's' : ''})` : '';
   if (!_cartItems.length) { wrap.innerHTML = `<div style="color:var(--text-tertiary);font-size:0.78rem;padding:0.6rem 0;text-align:center;border:1px dashed var(--border);border-radius:8px">No items yet</div>`; if (totWrap) totWrap.style.display = 'none'; return; }
-  wrap.innerHTML = `<div style="border:1px solid var(--border);border-radius:9px;overflow:hidden">    <div style="display:grid;grid-template-columns:1fr 130px 28px;gap:0.4rem;padding:0.4rem 0.75rem;background:var(--bg-secondary);font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary)"><span>Product · Serial</span><span>Sale Price ₹</span><span></span></div>
-    ${_cartItems.map((it, i) => {
-    const ic = it.matCostPerPiece + it.ohCostPerPiece + it.totalWage;
-    return `<div style="display:grid;grid-template-columns:1fr 130px 28px;gap:0.4rem;padding:0.5rem 0.75rem;align-items:center;border-top:1px solid var(--border-light)">
-        <div>
-          <div style="font-weight:600;font-size:0.83rem">${it.product}</div>
-          <div style="font-family:var(--font-mono);font-size:0.7rem;color:var(--text-tertiary)">SN: ${it.serialNumber} · ${it.workerName}</div>
-          <div style="display:flex;flex-wrap:wrap;gap:0.3rem 0.6rem;margin-top:0.2rem">
-            ${it.matCostPerPiece > 0 ? `<span style="font-size:0.68rem;color:var(--amber-dark)">📦 Mat: ${fmtMoney(it.matCostPerPiece)}</span>` : ''}
-            ${it.ohCostPerPiece > 0 ? `<span style="font-size:0.68rem;color:var(--info)">💡 OH: ${fmtMoney(it.ohCostPerPiece)}</span>` : ''}
-            ${it.totalWage > 0 ? `<span style="font-size:0.68rem;color:var(--text-tertiary)">💳 Wages: ${fmtMoney(it.totalWage)}</span>` : ''}
-            ${ic > 0 ? `<span style="font-size:0.68rem;font-weight:700;color:var(--text-primary);background:var(--amber-pale);padding:0.05rem 0.35rem;border-radius:4px;border:1px solid var(--amber-light)">Total cost: ${fmtMoney(ic)}</span>` : ''}
+  // Group cart items by product for display
+  const cartGroups = {};
+  _cartItems.forEach((it, i) => {
+    if (!cartGroups[it.product]) cartGroups[it.product] = [];
+    cartGroups[it.product].push({ ...it, _idx: i });
+  });
+
+  wrap.innerHTML = `<div style="border:1px solid var(--border);border-radius:9px;overflow:hidden">
+    <div style="display:grid;grid-template-columns:1fr 130px 28px;gap:0.4rem;padding:0.4rem 0.75rem;background:var(--bg-secondary);font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-tertiary)">
+      <span>Product</span><span>Price / pc ₹</span><span></span>
+    </div>
+    ${Object.entries(cartGroups).map(([productName, groupItems]) => {
+      const firstIdx = groupItems[0]._idx;
+      const firstItem = groupItems[0];
+      const ic = firstItem.matCostPerPiece + firstItem.ohCostPerPiece + firstItem.totalWage;
+      const groupPrice = groupItems[0].price || 0;
+      const snList = groupItems.map(it => it.serialNumber).filter(Boolean).join(', ');
+      return `<div style="padding:0.5rem 0.75rem;border-top:1px solid var(--border-light)">
+        <div style="display:grid;grid-template-columns:1fr 130px 28px;gap:0.4rem;align-items:center">
+          <div>
+            <div style="font-weight:600;font-size:0.83rem">${productName} <span style="font-size:0.72rem;font-weight:700;color:var(--amber-dark);background:var(--amber-pale);padding:0.1rem 0.4rem;border-radius:99px;border:1px solid var(--amber-light)">× ${groupItems.length}</span></div>
+            ${snList ? `<div style="font-family:var(--font-mono);font-size:0.68rem;color:var(--text-light);margin-top:0.15rem">SN: ${snList}</div>` : ''}
+            <div style="display:flex;flex-wrap:wrap;gap:0.3rem 0.6rem;margin-top:0.2rem">
+              ${ic > 0 ? `<span style="font-size:0.68rem;font-weight:700;color:var(--text-primary);background:var(--amber-pale);padding:0.05rem 0.35rem;border-radius:4px;border:1px solid var(--amber-light)">Cost/pc: ${fmtMoney(ic)}</span>` : ''}
+              ${groupItems.length > 1 && groupPrice > 0 ? `<span style="font-size:0.68rem;color:var(--success)">Subtotal: ${fmtMoney(groupPrice * groupItems.length)}</span>` : ''}
+            </div>
           </div>
+          <input class="finput cart-group-price" id="cart-group-price-${firstIdx}" type="number" min="0" step="0.01" value="${groupPrice || ''}" placeholder="0.00" style="text-align:right;font-weight:600" data-product="${productName.replace(/"/g,'&quot;')}"/>
+          <button class="row-del" onclick="removeGroupFromCart('${productName.replace(/'/g,"\\'")}')">×</button>
         </div>
-        <input class="finput" id="cart-price-${i}" type="number" min="0" step="0.01" value="${it.price || ''}" placeholder="0.00" style="text-align:right;font-weight:600"/>
-        <button class="row-del" onclick="removeFromCart(${i})">×</button>
       </div>`;
-  }).join('')
-    }
+    }).join('')}
   </div>`;
-  _cartItems.forEach((_, i) => { document.getElementById(`cart-price-${i}`)?.addEventListener('input', e => { _cartItems[i].price = parseFloat(e.target.value) || 0; _recalcTotals(); }); });
+
+  // Wire price inputs — when group price changes, update all items in that group
+  document.querySelectorAll('.cart-group-price').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const price = parseFloat(e.target.value) || 0;
+      const product = inp.dataset.product;
+      _cartItems.forEach((it, i) => { if (it.product === product) _cartItems[i].price = price; });
+      // Update subtotal display inline
+      const subtotalEl = inp.closest('div[style*="padding:0.5rem"]')?.querySelector('span[style*="color:var(--success)"]');
+      if (subtotalEl && price > 0) {
+        const cnt = _cartItems.filter(it => it.product === product).length;
+        subtotalEl.textContent = `Subtotal: ${fmtMoney(price * cnt)}`;
+      }
+      _recalcTotals();
+    });
+  });
   if (totWrap) totWrap.style.display = ''; _recalcTotals();
 }
 function removeFromCart(i) { _cartItems.splice(i, 1); _renderCart(); _onProductSearch(); }
+function removeGroupFromCart(productName) { _cartItems = _cartItems.filter(it => it.product !== productName); _renderCart(); _onProductSearch(); }
 function _recalcTotals() {
   const sub = _cartItems.reduce((s, it) => s + parseFloat(it.price || 0), 0);
   const pct = parseFloat(document.getElementById('fsl-tax-pct')?.value || 0), tax = sub * pct / 100, tot = sub + tax;
