@@ -2679,16 +2679,14 @@ function deletePfgBatch(batchId) {
 
 /* ═══════════ SALES ═══════════ */
 let _cartItems = [], _editSaleId = null;
+let _salesRowCount = 0;
 function openSalesModal(preloadFgId = null, editSaleId = null) {
-  _cartItems = []; _editSaleId = editSaleId || null;
+  _cartItems = []; _editSaleId = editSaleId || null; _salesRowCount = 0;
   ['fsl-buyer-name', 'fsl-buyer-phone', 'fsl-buyer-addr', 'fsl-billno'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('fsl-date').value = todayStr();
   document.getElementById('fsl-buyer-type').value = 'Shop';
   document.getElementById('fsl-tax-pct').value = '0';
-  document.getElementById('fsl-prod-search').value = '';
-  document.getElementById('fsl-qty-input').value = '1';
-  document.getElementById('fsl-serial-results').innerHTML = '';
-  document.getElementById('fsl-avail-count').innerHTML = '';
+  document.getElementById('fsl-prod-rows').innerHTML = '<div class="sup-empty-hint">No items yet — click "+ Add Product"</div>';
 
   if (editSaleId) {
     const sl = DB.find('sales', editSaleId);
@@ -2700,16 +2698,14 @@ function openSalesModal(preloadFgId = null, editSaleId = null) {
       document.getElementById('fsl-date').value = sl.date || todayStr();
       document.getElementById('fsl-buyer-type').value = sl.buyerType || 'Shop';
       document.getElementById('fsl-tax-pct').value = sl.taxPct || 0;
-      (sl.items || []).forEach(it => {
+      const grouped = {};
+      (sl.items || []).forEach(it => { grouped[it.product] = (grouped[it.product] || 0) + 1; });
+      Object.entries(grouped).forEach(([prod, qty]) => _salesAddRow(prod, qty));
+      _cartItems = (sl.items || []).map(it => {
         const fg = DB.find('finished', it.fgId);
-        if (fg) _cartItems.push({
-          fgId: it.fgId, product: it.product, serialNumber: it.serialNumber,
-          workerName: it.workerName, date: fg.date,
-          matCostPerPiece: parseFloat(it.matCostPerPiece || 0),
-          ohCostPerPiece: parseFloat(it.ohCostPerPiece || fg.ohCostPerPiece || 0),
-          totalWage: parseFloat(it.totalWage || 0), price: parseFloat(it.price || 0)
-        });
+        return { fgId: it.fgId, product: it.product, serialNumber: it.serialNumber, workerName: it.workerName, date: fg?.date, matCostPerPiece: parseFloat(it.matCostPerPiece || 0), ohCostPerPiece: parseFloat(it.ohCostPerPiece || fg?.ohCostPerPiece || 0), totalWage: parseFloat(it.totalWage || 0), price: parseFloat(it.price || 0) };
       });
+      _renderCart();
       const titleEl = document.querySelector('#modal-sales .modal-title');
       if (titleEl) titleEl.textContent = 'Edit Sales Bill';
     }
@@ -2718,23 +2714,27 @@ function openSalesModal(preloadFgId = null, editSaleId = null) {
     if (titleEl) titleEl.textContent = 'New Sales Bill';
   }
 
-  _renderCart();
-
   if (preloadFgId && !editSaleId) {
     const fg = DB.find('finished', preloadFgId);
     if (fg && !fg.sold) {
       if (fg.polishStatus === 'pending') { toast('This item must be polished before selling', 'warning'); closeModal('modal-sales'); return; }
-      _addToCart(fg);
+      _salesAddRow(fg.product, 1);
     }
   }
 
-  const psEl = document.getElementById('fsl-prod-search');
-  const psCl = psEl.cloneNode(true); psEl.parentNode.replaceChild(psCl, psEl);
-  document.getElementById('fsl-prod-search').addEventListener('input', _onProductSearch);
+  const addRowBtn = document.getElementById('fsl-add-row');
+  const arCl = addRowBtn.cloneNode(true); addRowBtn.parentNode.replaceChild(arCl, addRowBtn);
+  document.getElementById('fsl-add-row').addEventListener('click', () => _salesAddRow());
 
-  const qtyEl = document.getElementById('fsl-qty-input');
-  const qtyCl = qtyEl.cloneNode(true); qtyEl.parentNode.replaceChild(qtyCl, qtyEl);
-  document.getElementById('fsl-qty-input').addEventListener('input', _onProductSearch);
+  const confirmBtn = document.getElementById('fsl-confirm-rows');
+  const cfCl = confirmBtn.cloneNode(true); confirmBtn.parentNode.replaceChild(cfCl, confirmBtn);
+  document.getElementById('fsl-confirm-rows').addEventListener('click', () => {
+    _cartItems = _buildCartFromRows();
+    if (!_cartItems.length) { toast('No matching products found', 'warning'); return; }
+    _cartItems.forEach(it => it.price = 0);
+    _renderCart();
+    toast(`${_cartItems.length} item(s) added to bill`);
+  });
 
   const txEl = document.getElementById('fsl-tax-pct');
   const txCl = txEl.cloneNode(true); txEl.parentNode.replaceChild(txCl, txEl);
@@ -2746,105 +2746,67 @@ function openSalesModal(preloadFgId = null, editSaleId = null) {
   document.getElementById('sl-save').textContent = editSaleId ? '💾 Update Bill' : '🧾 Save Bill';
 
   openModal('modal-sales');
-  setTimeout(() => document.getElementById('fsl-prod-search')?.focus(), 150);
 }
-function _onProductSearch() {
-  const q = (document.getElementById('fsl-prod-search')?.value || '').toLowerCase().trim();
-  const qty = parseInt(document.getElementById('fsl-qty-input')?.value) || 1;
-  const resEl = document.getElementById('fsl-serial-results');
-  const availEl = document.getElementById('fsl-avail-count');
-  if (!resEl) return;
-  if (!q) { resEl.innerHTML = ''; if (availEl) availEl.innerHTML = ''; return; }
+function _salesAddRow(productName = '', qty = 1) {
+  const wrap = document.getElementById('fsl-prod-rows');
+  const hint = wrap?.querySelector('.sup-empty-hint');
+  if (hint) hint.remove();
+  const i = _salesRowCount++;
+  const availableProducts = [...new Set(DB.all('finished').filter(f => f.polishStatus === 'done' && !f.sold).map(f => f.product))];
+  const div = document.createElement('div');
+  div.className = 'bill-row-wrap'; div.id = `sl-row-wrap-${i}`;
+  div.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 80px 110px 28px;gap:0.4rem;align-items:center;margin-bottom:0.4rem">
+      <div class="combo-wrap"><input class="finput" id="sl-prod-${i}" placeholder="Product name" value="${productName}" autocomplete="off"/><div class="combo-drop" id="sl-prod-drop-${i}"></div></div>
+      <input class="finput" id="sl-qty-${i}" type="number" min="1" step="1" value="${qty}" placeholder="1" style="text-align:center"/>
+      <div id="sl-avail-${i}" style="font-size:0.72rem;color:var(--text-tertiary);font-family:var(--font-mono);padding:0 0.3rem;line-height:1.3"></div>
+      <button class="row-del" onclick="slDelRow(${i})">×</button>
+    </div>
+    <div id="sl-row-warn-${i}"></div>`;
+  wrap.appendChild(div);
+  buildCombo(`sl-prod-${i}`, `sl-prod-drop-${i}`, availableProducts, val => { document.getElementById(`sl-prod-${i}`).value = val; _updateSlRowAvail(i); });
+  document.getElementById(`sl-prod-${i}`).addEventListener('input', () => _updateSlRowAvail(i));
+  document.getElementById(`sl-qty-${i}`).addEventListener('input', () => _updateSlRowAvail(i));
+  if (productName) _updateSlRowAvail(i);
+  if (!productName) setTimeout(() => document.getElementById(`sl-prod-${i}`)?.focus(), 50);
+}
 
-  const unsold = DB.all('finished').filter(f => {
-    if (_cartItems.find(c => c.fgId === f.id)) return false;
-    if (f.polishStatus !== 'done') return false;
-    if (!f.sold) return true;
-    if (_editSaleId && f.saleId === _editSaleId) return true;
-    return false;
-  });
-
-  const byProduct = unsold.filter(f => f.product.toLowerCase().includes(q));
-  const bySerial = unsold.filter(f => f.serialNumber && f.serialNumber.toLowerCase().includes(q) && !byProduct.find(p => p.id === f.id));
-  const results = [...byProduct, ...bySerial];
-
-  if (!results.length) {
-    const pendingMatch = DB.all('finished').filter(f => !f.sold && f.polishStatus === 'pending' && (f.product.toLowerCase().includes(q) || (f.serialNumber || '').toLowerCase().includes(q)));
-    if (pendingMatch.length) {
-      resEl.innerHTML = `<div style="font-size:0.76rem;padding:0.5rem 0.75rem;background:var(--amber-pale);border:1px solid var(--amber-light);border-radius:8px;color:var(--amber-dark)">🎨 <strong>${pendingMatch.length} item(s) found but awaiting polish</strong> — complete polish job first.</div>`;
-    } else {
-      resEl.innerHTML = `<div style="font-size:0.76rem;color:var(--text-tertiary);padding:0.5rem 0">No polished products match "<em>${q}</em>"</div>`;
-    }
-    if (availEl) availEl.innerHTML = '';
-    return;
+function _updateSlRowAvail(i) {
+  const name = (document.getElementById(`sl-prod-${i}`)?.value || '').trim();
+  const qty = parseInt(document.getElementById(`sl-qty-${i}`)?.value) || 1;
+  const availEl = document.getElementById(`sl-avail-${i}`);
+  const warnEl = document.getElementById(`sl-row-warn-${i}`);
+  if (!availEl) return;
+  if (!name) { availEl.innerHTML = ''; if (warnEl) warnEl.innerHTML = ''; return; }
+  const avail = DB.all('finished').filter(f => f.product === name && f.polishStatus === 'done' && !f.sold).length;
+  const pendingCount = DB.all('finished').filter(f => f.product === name && f.polishStatus === 'pending' && !f.sold).length;
+  availEl.innerHTML = avail >= qty ? `<span style="color:var(--success)">${avail} available</span>` : `<span style="color:var(--danger)">Only ${avail} available</span>`;
+  if (warnEl) {
+    if (!avail && pendingCount) warnEl.innerHTML = `<div style="font-size:0.72rem;padding:0.3rem 0.5rem;background:var(--amber-pale);border:1px solid var(--amber-light);border-radius:6px;color:var(--amber-dark);margin-bottom:0.4rem">🎨 ${pendingCount} item(s) awaiting polish</div>`;
+    else if (!avail) warnEl.innerHTML = `<div style="font-size:0.72rem;padding:0.3rem 0.5rem;background:var(--danger-light);border:1px solid var(--danger);border-radius:6px;color:var(--danger);margin-bottom:0.4rem">No stock available</div>`;
+    else warnEl.innerHTML = '';
   }
-
-  // Group by product name for dropdown
-  const grouped = {};
-  results.forEach(f => { if (!grouped[f.product]) grouped[f.product] = []; grouped[f.product].push(f); });
-
-  resEl.innerHTML = `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;overflow:hidden">` +
-    Object.entries(grouped).map(([name, items]) => {
-      const enough = items.length >= qty;
-      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 0.85rem;border-bottom:1px solid var(--border-light);cursor:pointer;transition:background 0.1s;gap:0.75rem"
-        onmouseover="this.style.background='var(--amber-pale)'"
-        onmouseout="this.style.background=''"
-        onclick="_selectProductFromSearch('${name.replace(/'/g, "\\'")}', ${qty})">
-        <div style="flex:1;min-width:0">
-          <span style="font-weight:700;font-size:0.88rem;color:var(--text-primary)">${name}</span>
-          <span style="font-size:0.72rem;color:var(--text-tertiary);margin-left:0.6rem;font-family:var(--font-mono)">${items.length} in stock</span>
-        </div>
-        <span style="font-size:0.72rem;font-weight:600;padding:0.2rem 0.6rem;border-radius:99px;flex-shrink:0;
-          background:${enough ? 'var(--success-light)' : 'var(--danger-light)'};
-          color:${enough ? 'var(--success)' : 'var(--danger)'}">
-          ${enough ? `+ Add ${qty}` : `Only ${items.length}`}
-        </span>
-      </div>`;
-    }).join('') + `</div>`;
-
-  if (availEl) availEl.innerHTML = '';
 }
-function _selectProductFromSearch(productName, qty) {
-  const unsold = DB.all('finished').filter(f => {
-    if (_cartItems.find(c => c.fgId === f.id)) return false;
-    if (f.polishStatus !== 'done' || f.sold) return false;
-    return f.product === productName;
-  });
-  const toAdd = unsold.slice(0, qty);
-  if (!toAdd.length) { toast('No items available', 'warning'); return; }
-  toAdd.forEach(fg => {
-    _cartItems.push({
-      fgId: fg.id, product: fg.product, serialNumber: fg.serialNumber,
-      workerName: fg.workerName, date: fg.date,
-      matCostPerPiece: parseFloat(fg.matCostPerPiece || 0),
-      ohCostPerPiece: parseFloat(fg.ohCostPerPiece || 0),
-      totalWage: parseFloat(fg.totalWage || 0) + parseFloat(fg.polishWage || 0),
-      price: 0
+
+function slDelRow(i) {
+  const el = document.getElementById(`sl-row-wrap-${i}`); if (el) el.remove();
+  const wrap = document.getElementById('fsl-prod-rows');
+  if (!wrap?.querySelector('.bill-row-wrap')) wrap.innerHTML = '<div class="sup-empty-hint">No items yet — click "+ Add Product"</div>';
+}
+
+function _buildCartFromRows() {
+  const newCart = [];
+  document.querySelectorAll('#fsl-prod-rows .bill-row-wrap').forEach(row => {
+    const i = row.id.replace('sl-row-wrap-', '');
+    const name = (document.getElementById(`sl-prod-${i}`)?.value || '').trim();
+    const qty = parseInt(document.getElementById(`sl-qty-${i}`)?.value) || 1;
+    if (!name) return;
+    const available = DB.all('finished').filter(f => f.product === name && f.polishStatus === 'done' && !f.sold && !newCart.find(c => c.fgId === f.id));
+    available.slice(0, qty).forEach(fg => {
+      newCart.push({ fgId: fg.id, product: fg.product, serialNumber: fg.serialNumber, workerName: fg.workerName, date: fg.date, matCostPerPiece: parseFloat(fg.matCostPerPiece || 0), ohCostPerPiece: parseFloat(fg.ohCostPerPiece || 0), totalWage: parseFloat(fg.totalWage || 0) + parseFloat(fg.polishWage || 0), price: 0 });
     });
   });
-  // Clear search
-  document.getElementById('fsl-prod-search').value = '';
-  document.getElementById('fsl-serial-results').innerHTML = '';
-  document.getElementById('fsl-avail-count').innerHTML = '';
-  _renderCart();
-  toast(`Added ${toAdd.length} × ${productName}`);
-}
-function _addQtyToCart(productName, qty) {
-  const unsold = DB.all('finished').filter(f => {
-    if (_cartItems.find(c => c.fgId === f.id)) return false;
-    if (f.polishStatus !== 'done' || f.sold) return false;
-    return f.product === productName;
-  });
-  const toAdd = unsold.slice(0, qty);
-  if (!toAdd.length) { toast('No items available', 'warning'); return; }
-  toAdd.forEach(fg => {
-    _cartItems.push({ fgId: fg.id, product: fg.product, serialNumber: fg.serialNumber, workerName: fg.workerName, date: fg.date, matCostPerPiece: parseFloat(fg.matCostPerPiece || 0), ohCostPerPiece: parseFloat(fg.ohCostPerPiece || 0), totalWage: parseFloat(fg.totalWage || 0) + parseFloat(fg.polishWage || 0), price: 0 });
-  });
-  _renderCart();
-  document.getElementById('fsl-prod-search').value = '';
-  document.getElementById('fsl-serial-results').innerHTML = '';
-  document.getElementById('fsl-avail-count').innerHTML = '';
-  toast(`Added ${toAdd.length} × ${productName}`);
+  return newCart;
 } function _addToCart_byId(fgId) { const fg = DB.find('finished', fgId); if (fg) _addToCart(fg); }
 function _addToCart(fg) {
   if (fg.polishStatus === 'pending') { toast('This item must be polished before selling', 'warning'); return; }
@@ -2917,6 +2879,7 @@ function _recalcTotals() {
   set('fsl-subtotal', fmtMoney(sub)); set('fsl-tax-display', fmtMoney(tax)); set('fsl-tax-pct-display', pct); set('fsl-grand-total', fmtMoney(tot));
 }
 function saveSalesBill() {
+  if (!_cartItems.length) { _cartItems = _buildCartFromRows(); }
   const buyerName = document.getElementById('fsl-buyer-name').value.trim(), date = document.getElementById('fsl-date').value;
   if (!_cartItems.length) { toast('Add at least one product', 'danger'); return; }
   if (!buyerName) { toast('Enter buyer name', 'danger'); return; }
@@ -3621,25 +3584,19 @@ function createModals() {
   <div class="modal-backdrop" id="modal-sales">
   <div class="modal modal-lg">
     <div class="modal-hdr">
-      <div><h3 class="modal-title">New Sales Bill</h3><p class="modal-sub">Search product · set quantity · add to cart</p></div>
+      <div><h3 class="modal-title">New Sales Bill</h3><p class="modal-sub">Add products · confirm · set prices</p></div>
       <button class="modal-close" onclick="closeModal('modal-sales')">×</button>
     </div>
     <div class="modal-body">
 
       <div class="approve-section">
         <p class="section-label">Add Products to Bill</p>
-        <div style="display:grid;grid-template-columns:1fr 110px;gap:0.6rem;align-items:end;margin-bottom:0.5rem">
-          <div class="field-group" style="margin-bottom:0">
-            <label>Product Name or Serial No.</label>
-            <input class="finput" id="fsl-prod-search" type="text" placeholder="Type to search…" autocomplete="off"/>
-          </div>
-          <div class="field-group" style="margin-bottom:0">
-            <label>Quantity</label>
-            <input class="finput" id="fsl-qty-input" type="number" min="1" step="1" value="1" placeholder="1" style="text-align:center;font-weight:700"/>
-          </div>
+        <div style="display:grid;grid-template-columns:1fr 80px 110px 28px;gap:0.4rem;padding:0.3rem 0;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-tertiary);margin-bottom:0.2rem">
+          <span>Product Name</span><span>Qty</span><span>Available</span><span></span>
         </div>
-        <div id="fsl-avail-count" style="margin-bottom:0.4rem"></div>
-        <div id="fsl-serial-results" style="max-height:260px;overflow-y:auto"></div>
+        <div id="fsl-prod-rows"><div class="sup-empty-hint">No items yet — click "+ Add Product"</div></div>
+        <button class="add-row-btn" id="fsl-add-row">+ Add Product</button>
+        <button class="btn btn-ghost btn-sm" id="fsl-confirm-rows" style="width:100%;margin-top:0.3rem;border-color:var(--amber);color:var(--amber-dark)">✓ Confirm Products → Add to Cart</button>
       </div>
 
       <div class="approve-section">
@@ -3674,6 +3631,7 @@ function createModals() {
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('modal-sales')">Cancel</button><button class="btn btn-primary" id="sl-save">🧾 Save Bill</button></div>
   </div>
+</div>
 </div>
 <div class="modal-backdrop" id="modal-purchased-fg">
     <div class="modal modal-lg">
