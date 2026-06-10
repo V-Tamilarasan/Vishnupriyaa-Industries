@@ -2682,6 +2682,13 @@ let _cartItems = [], _editSaleId = null;
 let _salesRowCount = 0;
 function openSalesModal(preloadFgId = null, editSaleId = null) {
   _cartItems = []; _editSaleId = editSaleId || null; _salesRowCount = 0;
+  const cartWrap = document.getElementById('fsl-cart-wrap');
+  if (cartWrap) cartWrap.innerHTML = '<div style="color:var(--text-tertiary);font-size:0.78rem;padding:0.6rem 0;text-align:center;border:1px dashed var(--border);border-radius:8px">No items yet</div>';
+  const totWrap = document.getElementById('fsl-totals-wrap');
+  if (totWrap) totWrap.style.display = 'none';
+  const cntEl = document.getElementById('fsl-cart-count');
+  if (cntEl) cntEl.textContent = '';
+  document.getElementById('fsl-prod-rows').innerHTML = '<div class="sup-empty-hint">No items yet — click "+ Add Product"</div>';
   ['fsl-buyer-name', 'fsl-buyer-phone', 'fsl-buyer-addr', 'fsl-billno'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('fsl-date').value = todayStr();
   document.getElementById('fsl-buyer-type').value = 'Shop';
@@ -2831,12 +2838,12 @@ function _renderCart() {
       <span>Product</span><span>Price / pc ₹</span><span></span>
     </div>
     ${Object.entries(cartGroups).map(([productName, groupItems]) => {
-      const firstIdx = groupItems[0]._idx;
-      const firstItem = groupItems[0];
-      const ic = firstItem.matCostPerPiece + firstItem.ohCostPerPiece + firstItem.totalWage;
-      const groupPrice = groupItems[0].price || 0;
-      const snList = groupItems.map(it => it.serialNumber).filter(Boolean).join(', ');
-      return `<div style="padding:0.5rem 0.75rem;border-top:1px solid var(--border-light)">
+    const firstIdx = groupItems[0]._idx;
+    const firstItem = groupItems[0];
+    const ic = firstItem.matCostPerPiece + firstItem.ohCostPerPiece + firstItem.totalWage;
+    const groupPrice = groupItems[0].price || 0;
+    const snList = groupItems.map(it => it.serialNumber).filter(Boolean).join(', ');
+    return `<div style="padding:0.5rem 0.75rem;border-top:1px solid var(--border-light)">
         <div style="display:grid;grid-template-columns:1fr 130px 28px;gap:0.4rem;align-items:center">
           <div>
             <div style="font-weight:600;font-size:0.83rem">${productName} <span style="font-size:0.72rem;font-weight:700;color:var(--amber-dark);background:var(--amber-pale);padding:0.1rem 0.4rem;border-radius:99px;border:1px solid var(--amber-light)">× ${groupItems.length}</span></div>
@@ -2846,11 +2853,11 @@ function _renderCart() {
               ${groupItems.length > 1 && groupPrice > 0 ? `<span style="font-size:0.68rem;color:var(--success)">Subtotal: ${fmtMoney(groupPrice * groupItems.length)}</span>` : ''}
             </div>
           </div>
-          <input class="finput cart-group-price" id="cart-group-price-${firstIdx}" type="number" min="0" step="0.01" value="${groupPrice || ''}" placeholder="0.00" style="text-align:right;font-weight:600" data-product="${productName.replace(/"/g,'&quot;')}"/>
-          <button class="row-del" onclick="removeGroupFromCart('${productName.replace(/'/g,"\\'")}')">×</button>
+          <input class="finput cart-group-price" id="cart-group-price-${firstIdx}" type="number" min="0" step="0.01" value="${groupPrice || ''}" placeholder="0.00" style="text-align:right;font-weight:600" data-product="${productName.replace(/"/g, '&quot;')}"/>
+          <button class="row-del" onclick="removeGroupFromCart('${productName.replace(/'/g, "\\'")}')">×</button>
         </div>
       </div>`;
-    }).join('')}
+  }).join('')}
   </div>`;
 
   // Wire price inputs — when group price changes, update all items in that group
@@ -2970,10 +2977,11 @@ function renderSales() {
  
       <!-- Footer actions -->
       <div class="sl-card-foot">
-        <button class="btn btn-ghost btn-sm" onclick="openSalesModal(null,'${sl.id}')">✏️ Edit</button>
-        <button class="btn btn-ghost btn-sm" onclick="printSalesBill('${sl.id}')">🖨 Print Bill</button>
-        <button class="act-btn danger" onclick="deleteSale('${sl.id}')">🗑</button>
-      </div>
+  <strong style="font-family:var(--font-mono);font-size:1rem;color:var(--success);margin-right:auto">${fmtMoney(sl.totalAmount || sl.amount || 0)}</strong>
+  <button class="btn btn-ghost btn-sm" onclick="openSalesModal(null,'${sl.id}')">✏️ Edit</button>
+  <button class="btn btn-ghost btn-sm" onclick="printSalesBill('${sl.id}')">🖨 Print Bill</button>
+  <button class="act-btn danger" onclick="deleteSale('${sl.id}')">🗑</button>
+</div>
  
     </div>`;
   }).join('');
