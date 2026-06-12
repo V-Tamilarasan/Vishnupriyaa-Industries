@@ -2907,12 +2907,38 @@ function saveSalesBill() {
   _editSaleId = null;
 }
 function renderSales() {
-  const allSales = DB.all('sales'), search = (document.getElementById('sales-search')?.value || '').toLowerCase();
-  const sales = allSales.filter(sl =>
+  const allSales = DB.all('sales');
+  const search = (document.getElementById('sales-search')?.value || '').toLowerCase();
+  const sortVal = document.getElementById('sales-sort')?.value || 'newest';
+
+  let sales = allSales.filter(sl =>
     (sl.product || '').toLowerCase().includes(search) ||
     (sl.serialNumber || '').toLowerCase().includes(search) ||
-    (sl.buyerName || '').toLowerCase().includes(search)
+    (sl.buyerName || '').toLowerCase().includes(search) ||
+    (sl.billno || '').toLowerCase().includes(search) ||
+    (sl.items || []).some(it =>
+      (it.product || '').toLowerCase().includes(search) ||
+      (it.serialNumber || '').toLowerCase().includes(search)
+    )
   );
+
+  // Sort
+  sales = [...sales].sort((a, b) => {
+    switch (sortVal) {
+      case 'oldest':
+        return new Date(a.date) - new Date(b.date);
+      case 'amount-desc':
+        return parseFloat(b.totalAmount || b.amount || 0) - parseFloat(a.totalAmount || a.amount || 0);
+      case 'amount-asc':
+        return parseFloat(a.totalAmount || a.amount || 0) - parseFloat(b.totalAmount || b.amount || 0);
+      case 'buyer':
+        return (a.buyerName || '').localeCompare(b.buyerName || '');
+      case 'items-desc':
+        return (b.items?.length || 1) - (a.items?.length || 1);
+      default: // newest
+        return new Date(b.date) - new Date(a.date);
+    }
+  });
 
   const statsEl = document.getElementById('sales-stats');
   if (statsEl) statsEl.innerHTML = `
@@ -2923,24 +2949,32 @@ function renderSales() {
 
   const listEl = document.getElementById('sales-list'); if (!listEl) return;
 
-  if (!allSales.length) { listEl.innerHTML = `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">🧾</span>No sales bills yet</div></div>`; return; }
-  if (!sales.length) { listEl.innerHTML = `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">🔍</span>No results</div></div>`; return; }
+  if (!allSales.length) {
+    listEl.innerHTML = `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">🧾</span>No sales bills yet</div></div>`;
+    return;
+  }
+  if (!sales.length) {
+    listEl.innerHTML = `<div class="table-card"><div class="t-empty"><span class="t-empty-ico">🔍</span>No results for "<strong>${search}</strong>"</div></div>`;
+    return;
+  }
 
-  listEl.innerHTML = sales.map(sl => {
+  // Result count hint when filtering
+  const resultHint = search
+    ? `<div style="font-size:0.75rem;color:var(--text-tertiary);margin-bottom:0.6rem;font-family:var(--font-mono)">
+        Showing ${sales.length} of ${allSales.length} bills
+       </div>`
+    : '';
+
+  listEl.innerHTML = resultHint + sales.map(sl => {
     const items = sl.items || [{ product: sl.product, serialNumber: sl.serialNumber, workerName: sl.workerName || '' }];
-
-    // Group by product name
     const grouped = {};
     items.forEach(it => {
       if (!grouped[it.product]) grouped[it.product] = [];
       grouped[it.product].push(it);
     });
-
     const buyerIcon = sl.buyerType === 'Shop' ? '🏪' : '👤';
 
     return `<div class="sl-card">
- 
-      <!-- Bill header -->
       <div class="sl-card-hdr">
         <div class="sl-hdr-left">
           <div class="sl-buyer-row">
@@ -2960,8 +2994,6 @@ function renderSales() {
           <div class="sl-type-icon">${buyerIcon}</div>
         </div>
       </div>
- 
-      <!-- Products grouped -->
       <div class="sl-products">
         ${Object.entries(grouped).map(([productName, productItems]) => `
           <div class="sl-product-row">
@@ -2974,15 +3006,12 @@ function renderSales() {
             </div>
           </div>`).join('')}
       </div>
- 
-      <!-- Footer actions -->
       <div class="sl-card-foot">
-  <strong style="font-family:var(--font-mono);font-size:1rem;color:var(--success);margin-right:auto">${fmtMoney(sl.totalAmount || sl.amount || 0)}</strong>
-  <button class="btn btn-ghost btn-sm" onclick="openSalesModal(null,'${sl.id}')">✏️ Edit</button>
-  <button class="btn btn-ghost btn-sm" onclick="printSalesBill('${sl.id}')">🖨 Print Bill</button>
-  <button class="act-btn danger" onclick="deleteSale('${sl.id}')">🗑</button>
-</div>
- 
+        <strong style="font-family:var(--font-mono);font-size:1rem;color:var(--success);margin-right:auto">${fmtMoney(sl.totalAmount || sl.amount || 0)}</strong>
+        <button class="btn btn-ghost btn-sm" onclick="openSalesModal(null,'${sl.id}')">✏️ Edit</button>
+        <button class="btn btn-ghost btn-sm" onclick="printSalesBill('${sl.id}')">🖨 Print Bill</button>
+        <button class="act-btn danger" onclick="deleteSale('${sl.id}')">🗑</button>
+      </div>
     </div>`;
   }).join('');
 }
