@@ -2711,7 +2711,7 @@ function openSaleSummaryPopup(id) {
   const taxPct     = parseFloat(sl.taxPct || 0);
   const taxAmt     = parseFloat(sl.taxAmt || 0);
   const totalAmt   = parseFloat(sl.totalAmount || sl.amount || 0);
-  
+  const buyerIcon  = sl.buyerType === 'Shop' ? '🏪' : '👤';
 
   const productRows = Object.entries(grouped).map(([name, g]) => `
     <div class="sale-popup-product-row">
@@ -2742,7 +2742,14 @@ function openSaleSummaryPopup(id) {
       </div>
       <div class="sale-popup-body">
 
-        
+        <div class="sale-popup-buyer">
+          <div class="spb-name">${buyerIcon} ${sl.buyerName || '—'}</div>
+          <div class="spb-meta">
+            ${sl.buyerType || 'Customer'}
+            ${sl.buyerPhone ? ' · 📞 ' + sl.buyerPhone : ''}
+            ${sl.buyerAddr  ? ' · 📍 ' + sl.buyerAddr  : ''}
+          </div>
+        </div>
 
         <div class="sale-popup-product-hdr">
           <span>Product</span><span style="text-align:center">Qty</span><span style="text-align:right">Amount</span>
@@ -3009,6 +3016,7 @@ function renderSales() {
     (sl.product || '').toLowerCase().includes(search) ||
     (sl.serialNumber || '').toLowerCase().includes(search) ||
     (sl.buyerName || '').toLowerCase().includes(search) ||
+    (sl.buyerPhone || '').toLowerCase().includes(search) ||
     (sl.billno || '').toLowerCase().includes(search) ||
     (sl.items || []).some(it =>
       (it.product || '').toLowerCase().includes(search) ||
