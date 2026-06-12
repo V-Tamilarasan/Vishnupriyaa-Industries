@@ -349,6 +349,7 @@
     <section class="page" id="page-finished">
       <div class="page-inner">
         <div class="stat-grid" id="fg-stats"></div>
+        
         <div class="toolbar" style="margin-top:0">
           <div class="search-wrap">
             <span class="search-ico">⌕</span>
@@ -368,28 +369,19 @@
     </section>
 
     <!-- ══════════════════════ SALES ══════════════════════ -->
-<section class="page" id="page-sales">
-  <div class="page-inner">
-    <div class="stat-grid" id="sales-stats"></div>
-    <div class="toolbar" style="margin-top:0">
-      <div class="search-wrap">
-        <span class="search-ico">⌕</span>
-        <input type="text" class="search-input" id="sales-search"
-          placeholder="Search by product, buyer, serial…"
-          oninput="renderSales()" />
+    <section class="page" id="page-sales">
+      <div class="page-inner">
+        <div class="stat-grid" id="sales-stats"></div>
+        <div class="toolbar" style="margin-top:0">
+          <div class="search-wrap">
+            <span class="search-ico">⌕</span>
+            <input type="text" class="search-input" id="sales-search" placeholder="Search sales…"
+              oninput="renderSales()" />
+          </div>
+        </div>
+        <div id="sales-list"></div>
       </div>
-      <select class="sort-select" id="sales-sort" onchange="renderSales()">
-        <option value="newest">📅 Newest First</option>
-        <option value="oldest">📅 Oldest First</option>
-        <option value="amount-desc">💰 Amount: High → Low</option>
-        <option value="amount-asc">💰 Amount: Low → High</option>
-        <option value="buyer">🔤 Buyer A–Z</option>
-        <option value="items-desc">📦 Most Items First</option>
-      </select>
-    </div>
-    <div id="sales-list"></div>
-  </div>
-</section>
+    </section>
 
     <!-- ══════════════════════ REPORTS ══════════════════════ -->
     <section class="page" id="page-reports">
