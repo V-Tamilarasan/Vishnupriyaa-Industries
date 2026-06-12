@@ -421,7 +421,22 @@ html, body {
   padding:0.6rem 1rem; background:var(--bg-secondary);
   border-top:1px solid var(--border-light); display:flex; justify-content:flex-end;
 }
-
+.sort-select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.sort-select:focus {
+  outline: none;
+  border-color: var(--amber);
+  box-shadow: 0 0 0 3px rgba(217,119,6,0.12);
+}
 
 /* ════════════════════════════════════════════════
    FORMS & MODALS
