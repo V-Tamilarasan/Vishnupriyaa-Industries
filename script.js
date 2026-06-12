@@ -2476,7 +2476,10 @@ function renderFinished() {
     pmap[k].matCost += parseFloat(f.matCostPerPiece || 0);
     pmap[k].wageTotal += parseFloat(f.totalWage || 0);
   });
-  const summaryRows = Object.values(pmap).sort((a, b) => b.total - a.total);
+  const summarySearch = (document.getElementById('fg-summary-search')?.value || '').toLowerCase();
+  const summaryRows = Object.values(pmap)
+    .filter(p => p.name.toLowerCase().includes(summarySearch))
+    .sort((a, b) => b.total - a.total);
   const list = document.getElementById('fg-list'); if (!list) return;
 
   // Group purchased stock items by pfgBatchId for single-card display
@@ -2647,19 +2650,29 @@ function renderFinished() {
     </div>`;
   }
 
-  list.innerHTML = (summaryRows.length ? `
+  list.innerHTML =(Object.values(pmap).length ? `
     <div class="card" style="margin-bottom:1.2rem">
-      <div class="card-hdr"><span class="card-title">📊 Product Summary</span></div>
+      <div class="card-hdr">
+        <span class="card-title">📊 Product Summary</span>
+        <div class="search-wrap" style="max-width:220px">
+          <span class="search-ico">⌕</span>
+          <input type="text" class="search-input" id="fg-summary-search"
+            placeholder="Search summary…" oninput="_renderFgSummaryOnly()"
+            value="${(document.getElementById('fg-summary-search')?.value || '')}"
+            style="font-size:0.78rem;padding:0.35rem 0.6rem 0.35rem 1.9rem"/>
+        </div>
+      </div>
       <div class="card-body" style="padding:0">
         <table class="data-table">
           <thead><tr><th>Product</th><th style="text-align:center">Total</th><th style="text-align:center">Await Polish</th><th style="text-align:center">Ready</th><th style="text-align:center">Sold</th></tr></thead>
-          <tbody>${summaryRows.map(p => `<tr>
+          <tbody>${summaryRows.length ? summaryRows.map(p => `<tr>
             <td class="td-name">${p.name}</td>
             <td class="td-mono" style="text-align:center"><strong>${p.total}</strong></td>
             <td class="td-mono" style="text-align:center;color:var(--amber)">${p.awaitPolish}</td>
             <td class="td-mono" style="text-align:center;color:var(--info)">${p.readyToSell}</td>
             <td class="td-mono" style="text-align:center;color:var(--success)">${p.sold}</td>
-          </tr>`).join('')}</tbody>
+          </tr>`).join('') : `<tr><td colspan="5"><div class="t-empty" style="padding:1.5rem 0"><span class="t-empty-ico">🔍</span>No results</div></td></tr>`}
+          </tbody>
         </table>
       </div>
     </div>` : '') +
@@ -2678,6 +2691,87 @@ function deletePfgBatch(batchId) {
 }
 
 /* ═══════════ SALES ═══════════ */
+function openSaleSummaryPopup(id) {
+  const existing = document.getElementById('sale-summary-overlay');
+  if (existing) { existing.remove(); if (existing.dataset.saleId === id) return; }
+
+  const sl = DB.find('sales', id); if (!sl) return;
+  const items = sl.items || [{ product: sl.product, serialNumber: sl.serialNumber, price: sl.totalAmount || sl.amount, workerName: sl.workerName || '' }];
+
+  // Group by product
+  const grouped = {};
+  items.forEach(it => {
+    if (!grouped[it.product]) grouped[it.product] = { count: 0, pricePerPc: parseFloat(it.price || 0), subtotal: 0 };
+    grouped[it.product].count++;
+    grouped[it.product].subtotal += parseFloat(it.price || 0);
+    grouped[it.product].pricePerPc = parseFloat(it.price || 0);
+  });
+
+  const subtotal   = parseFloat(sl.subtotal || sl.totalAmount || sl.amount || 0);
+  const taxPct     = parseFloat(sl.taxPct || 0);
+  const taxAmt     = parseFloat(sl.taxAmt || 0);
+  const totalAmt   = parseFloat(sl.totalAmount || sl.amount || 0);
+  
+
+  const productRows = Object.entries(grouped).map(([name, g]) => `
+    <div class="sale-popup-product-row">
+      <div>
+        <div class="spp-name">${name}</div>
+        <div style="font-size:0.68rem;font-family:var(--font-mono);color:var(--text-light)">
+          ${fmtMoney(g.pricePerPc)} × ${g.count}
+        </div>
+      </div>
+      <div class="spp-qty">${g.count} pc${g.count > 1 ? 's' : ''}</div>
+      <div class="spp-amount">${fmtMoney(g.subtotal)}</div>
+    </div>`).join('');
+
+  const overlay = document.createElement('div');
+  overlay.id = 'sale-summary-overlay';
+  overlay.dataset.saleId = id;
+  overlay.className = 'sale-popup-overlay';
+  overlay.innerHTML = `
+    <div class="sale-popup-box">
+      <div class="sale-popup-hdr">
+        <div>
+          <div class="sale-popup-title">🧾 Bill Summary</div>
+          <div class="sale-popup-sub">
+            ${sl.billno ? '#' + sl.billno + ' · ' : ''}${fmtDate(sl.date)} · ${items.length} item${items.length > 1 ? 's' : ''}
+          </div>
+        </div>
+        <button class="sale-popup-close" onclick="document.getElementById('sale-summary-overlay').remove()">×</button>
+      </div>
+      <div class="sale-popup-body">
+
+        
+
+        <div class="sale-popup-product-hdr">
+          <span>Product</span><span style="text-align:center">Qty</span><span style="text-align:right">Amount</span>
+        </div>
+        ${productRows}
+
+        <hr class="sale-popup-divider"/>
+
+        <div class="sale-popup-totals-row">
+          <span class="spt-label">Subtotal</span>
+          <span class="spt-value">${fmtMoney(taxAmt > 0 ? subtotal - taxAmt : subtotal)}</span>
+        </div>
+        ${taxPct > 0 ? `
+        <div class="sale-popup-totals-row">
+          <span class="spt-label">Tax (${taxPct}%)</span>
+          <span class="spt-value">${fmtMoney(taxAmt)}</span>
+        </div>` : ''}
+
+        <div class="sale-popup-grand">
+          <span class="spg-label">Total Amount</span>
+          <span class="spg-value">${fmtMoney(totalAmt)}</span>
+        </div>
+
+      </div>
+    </div>`;
+
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
 let _cartItems = [], _editSaleId = null;
 let _salesRowCount = 0;
 function openSalesModal(preloadFgId = null, editSaleId = null) {
@@ -3008,6 +3102,7 @@ function renderSales() {
       </div>
       <div class="sl-card-foot">
         <strong style="font-family:var(--font-mono);font-size:1rem;color:var(--success);margin-right:auto">${fmtMoney(sl.totalAmount || sl.amount || 0)}</strong>
+        <button class="btn btn-ghost btn-sm" onclick="openSaleSummaryPopup('${sl.id}')">👁 View</button>
         <button class="btn btn-ghost btn-sm" onclick="openSalesModal(null,'${sl.id}')">✏️ Edit</button>
         <button class="btn btn-ghost btn-sm" onclick="printSalesBill('${sl.id}')">🖨 Print Bill</button>
         <button class="act-btn danger" onclick="deleteSale('${sl.id}')">🗑</button>
@@ -3370,7 +3465,32 @@ function confirmDeleteAllData() {
   if (!confirm('⚠ Delete ALL data? Cannot be undone.')) return; if (!confirm('Last chance — click OK.')) return;
   DB.clearAll(); updateCounts(); renderDashboard(); toast('All data deleted', 'warning');
 }
-
+function _renderFgSummaryOnly() {
+  const fin = DB.all('finished');
+  const pmap = {};
+  fin.forEach(f => {
+    const k = f.product;
+    if (!pmap[k]) pmap[k] = { name: k, total: 0, sold: 0, awaitPolish: 0, readyToSell: 0 };
+    pmap[k].total++;
+    f.sold ? pmap[k].sold++ : f.polishStatus === 'done' ? pmap[k].readyToSell++ : pmap[k].awaitPolish++;
+  });
+  const summarySearch = (document.getElementById('fg-summary-search')?.value || '').toLowerCase();
+  const summaryRows = Object.values(pmap)
+    .filter(p => p.name.toLowerCase().includes(summarySearch))
+    .sort((a, b) => b.total - a.total);
+  const tbody = document.querySelector('#fg-list table tbody');
+  if (!tbody) return;
+  tbody.innerHTML = summaryRows.length
+    ? summaryRows.map(p => `<tr>
+        <td class="td-name">${p.name}</td>
+        <td class="td-mono" style="text-align:center"><strong>${p.total}</strong></td>
+        <td class="td-mono" style="text-align:center;color:var(--amber)">${p.awaitPolish}</td>
+        <td class="td-mono" style="text-align:center;color:var(--info)">${p.readyToSell}</td>
+        <td class="td-mono" style="text-align:center;color:var(--success)">${p.sold}</td>
+      </tr>`).join('')
+    : `<tr><td colspan="5"><div class="t-empty" style="padding:1.5rem 0">
+        <span class="t-empty-ico">🔍</span>No results</div></td></tr>`;
+}
 /* ═══════════ MODALS HTML ═══════════ */
 function createModals() {
   document.getElementById('modals-container').innerHTML = `
