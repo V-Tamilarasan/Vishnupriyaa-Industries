@@ -1,4 +1,4 @@
-x<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -113,6 +113,14 @@ x<!DOCTYPE html>
             <line x1="9" y1="17" x2="15" y2="17" />
           </svg>
           <span>Sales Bills</span><span class="nav-count success" id="nc-sales">0</span>
+        </button>
+        <button class="nav-btn" data-page="balances">
+          <svg viewBox="0 0 24 24">
+            <line x1="12" y1="1" x2="12" y2="23" />
+            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+          </svg>
+          <span>Balances</span><span class="nav-count" id="nc-balances"
+            style="background:rgba(220,38,38,0.2);color:#f87171">0</span>
         </button>
         <button class="nav-btn" data-page="reports">
           <svg viewBox="0 0 24 24">
@@ -375,8 +383,7 @@ x<!DOCTYPE html>
         <div class="toolbar" style="margin-top:0">
           <div class="search-wrap">
             <span class="search-ico">⌕</span>
-            <input type="text" class="search-input" id="sales-search" placeholder="Search"
-              oninput="renderSales()" />
+            <input type="text" class="search-input" id="sales-search" placeholder="Search" oninput="renderSales()" />
           </div>
           <select class="sort-select" id="sales-sort" onchange="renderSales()">
             <option value="newest">📅 Newest First</option>
@@ -389,6 +396,10 @@ x<!DOCTYPE html>
         </div>
         <div id="sales-list"></div>
       </div>
+    </section>
+    <!-- ══════════════════════ BALANCES ══════════════════════ -->
+    <section class="page" id="page-balances">
+      <div class="page-inner"></div>
     </section>
     <!-- ══════════════════════ REPORTS ══════════════════════ -->
     <section class="page" id="page-reports">
@@ -538,4 +549,4 @@ x<!DOCTYPE html>
   </script>
 </body>
 
-</html>
+</html>>
