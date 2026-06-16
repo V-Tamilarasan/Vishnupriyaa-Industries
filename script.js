@@ -1,6 +1,6 @@
 const DB = (() => {
   const PFX = 'vi3_';
-  const COLS = ['materials', 'bills', 'workers', 'templates', 'issuances', 'productions', 'finished', 'sales', 'wagePayments', 'polishJobs'];
+  const COLS = ['materials', 'bills', 'workers', 'templates', 'issuances', 'productions', 'finished', 'sales', 'wagePayments', 'polishJobs', 'salePayments'];
   COLS.forEach(c => { try { _c[c] = JSON.parse(localStorage.getItem(PFX + c) || '[]'); } catch { _c[c] = []; } });
   const save = c => { try { localStorage.setItem(PFX + c, JSON.stringify(_c[c])); } catch { setTimeout(() => toast('Storage full!', 'danger'), 100); } };
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -105,13 +105,14 @@ const PAGE_CONFIG = {
   finished: { label: 'Finished Goods', btn: { text: '+ Add Purchased Stock', fn: openPurchasedFGModal } },
   sales: { label: 'Sales Bills', btn: { text: '+ New Sales Bill', fn: () => openSalesModal(null) } },
   reports: { label: 'Reports', btn: null },
+  balances: { label: 'Balances', btn: null },
 };
 const RENDERERS = {
   dashboard: 'renderDashboard', materials: 'renderMaterials', suppliers: 'renderSuppliers',
   workers: 'renderWorkers', 'worker-profile': 'renderWorkerProfile',
   templates: 'renderTemplates', productions: 'renderProductions',
   polish: 'renderPolish',
-  finished: 'renderFinished', sales: 'renderSales', reports: 'renderReports',
+  finished: 'renderFinished', sales: 'renderSales', reports: 'renderReports', balances: 'renderBalances',
 };
 let _profileWid = null;
 function nav(page, param) {
@@ -153,6 +154,12 @@ function updateCounts() {
   set('nc-sales', DB.all('sales').length);
   set('sf-holding', holding);
   set('sf-low-stock', low);
+  const pendingBalances = DB.all('sales').filter(s => {
+    const extraPaid = DB.where('salePayments', p => p.saleId === s.id).reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+    const totalReceived = parseFloat(s.amountReceived || s.totalAmount || s.amount || 0) + extraPaid;
+    return Math.max(0, parseFloat(s.totalAmount || s.amount || 0) - totalReceived) > 0.01;
+  }).length;
+  set('nc-balances', pendingBalances);
 }
 function openMatPopup(fgId, triggerBtn) {
   // Remove any existing popup
@@ -332,7 +339,36 @@ function openSupModal(editId = null) {
 
   openModal('modal-supplier');
 }
-
+let _epfgNewRows = [], _epfgNewRowCount = 0;
+function _epfgAddNewRow() {
+  const wrap = document.getElementById('epfg-new-rows');
+  const hint = wrap.querySelector('.sup-empty-hint');
+  if (hint) hint.remove();
+  const i = _epfgNewRowCount++;
+  _epfgNewRows[i] = { name: '', qty: 1, cost: 0 };
+  const div = document.createElement('div');
+  div.id = `epfg-new-wrap-${i}`;
+  div.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 70px 110px 28px;gap:0.4rem;align-items:center;padding:0.4rem 0;border-bottom:1px solid var(--border-light)">
+      <div class="combo-wrap">
+        <input class="finput" id="epfg-new-name-${i}" placeholder="Product name" autocomplete="off" style="font-size:0.82rem"/>
+        <div class="combo-drop" id="epfg-new-name-drop-${i}"></div>
+      </div>
+      <input class="finput" id="epfg-new-qty-${i}" type="number" min="1" step="1" value="1" placeholder="Qty" style="font-size:0.82rem"/>
+      <input class="finput" id="epfg-new-cost-${i}" type="number" min="0" step="0.01" placeholder="₹ cost" style="font-size:0.82rem"/>
+      <button class="row-del" onclick="document.getElementById('epfg-new-wrap-${i}').remove();_epfgNewRows[${i}]=null">×</button>
+    </div>`;
+  wrap.appendChild(div);
+  const existingProducts = [...new Set(DB.all('finished').map(f => f.product).filter(Boolean))];
+  buildCombo(`epfg-new-name-${i}`, `epfg-new-name-drop-${i}`, existingProducts, val => {
+    document.getElementById(`epfg-new-name-${i}`).value = val;
+    _epfgNewRows[i].name = val;
+  });
+  document.getElementById(`epfg-new-name-${i}`).addEventListener('input', e => _epfgNewRows[i].name = e.target.value);
+  document.getElementById(`epfg-new-qty-${i}`).addEventListener('input', e => _epfgNewRows[i].qty = parseInt(e.target.value) || 1);
+  document.getElementById(`epfg-new-cost-${i}`).addEventListener('input', e => _epfgNewRows[i].cost = parseFloat(e.target.value) || 0);
+  setTimeout(() => document.getElementById(`epfg-new-name-${i}`)?.focus(), 50);
+}
 function _supAddRowData(matVal = '', qtyVal = '', unitVal = '', priceVal = '') {
   const wrap = document.getElementById('sup-rows-wrap');
   const hint = wrap.querySelector('.sup-empty-hint');
@@ -1847,6 +1883,7 @@ function renderProductions() {
                 <div class="prod-card-title">${p.product}</div>
                 <div style="display:flex;gap:0.3rem;flex-shrink:0">
                   ${pendingPolish > 0 ? `<button class="act-btn" style="background:var(--amber-pale);border-color:var(--amber);color:var(--amber-dark);font-size:0.72rem" onclick="nav('polish')">🎨 ${pendingPolish} pending polish</button>` : ''}
+                  ${(p.materialsUsed || []).length ? `<button class="act-btn" style="font-size:0.72rem;padding:0.25rem 0.5rem" onclick="openProdMatPopup('${p.id}',this)">📦 Materials</button>` : ''}
                   <button class="act-btn danger" style="font-size:0.72rem;padding:0.25rem 0.5rem" onclick="deleteProduction('${p.id}')">🗑 Delete</button>
                 </div>
               </div>
@@ -1869,7 +1906,7 @@ function renderProductions() {
 ${polishMatCostPerPiece > 0 ? `<div class="pcc-item"><span class="pcc-label" style="color:var(--purple)">🎨 Polish mat. / pc<br><span style="font-size:0.55rem;color:var(--text-light)">${donePolish} of ${pieces} polished</span></span><span class="pcc-value pcc-purple">${fmtMoney(polishMatCostPerPiece)}</span></div>` : ''}
                 ${grandCostPc > 0 ? `<div class="pcc-item pcc-total"><span class="pcc-label">Grand cost / pc</span><span class="pcc-value pcc-total-val">${fmtMoney(grandCostPc)}</span></div>` : ''}         </div>
             </div>
-            ${(p.materialsUsed || []).length ? `<div class="prod-mats-used"><span class="pmu-label">Materials used (per pc):</span>${p.materialsUsed.map(m => `<span class="pmu-tag">${fmtNum(m.qty)} ${m.unit} ${m.mat}</span>`).join('')}</div>` : ''}
+            
             ${p.notes ? `<div class="prod-notes">💬 ${p.notes}</div>` : ''}
           </div>
         </div>`;
@@ -2399,7 +2436,74 @@ function pfgDelRow(i) {
   if (!wrap.querySelector('.bill-row-wrap'))
     wrap.innerHTML = '<div class="sup-empty-hint">No items yet — click "+ Add Row"</div>';
 }
+let _editPfgBatchId = null;
+function openEditPfgBatchModal(batchId) {
+  _editPfgBatchId = batchId;
+  const items = DB.where('finished', f => f.pfgBatchId === batchId);
+  if (!items.length) return;
+  const first = items[0];
+  document.getElementById('epfg-supplier').value = first.supplierName || first.workerName || '';
+  document.getElementById('epfg-billno').value = first.billno || '';
+  document.getElementById('epfg-date').value = first.date || todayStr();
+  document.getElementById('epfg-notes').value = first.notes || '';
 
+  const wrap = document.getElementById('epfg-items-wrap');
+  wrap.innerHTML = items.map(f => `
+    <div style="display:grid;grid-template-columns:1fr 110px;gap:0.5rem;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border-light)">
+      <input class="finput" id="epfg-product-${f.id}" type="text" value="${f.product}" placeholder="Product name" style="font-size:0.82rem"/>
+      <input class="finput" id="epfg-cost-${f.id}" type="number" min="0" step="0.01" value="${f.matCostPerPiece || 0}" placeholder="₹ cost" style="font-size:0.82rem"/>
+    </div>`).join('');
+
+  // new items section
+  document.getElementById('epfg-new-rows').innerHTML = '';
+  _epfgNewRows = []; _epfgNewRowCount = 0;
+
+  openModal('modal-edit-pfg-batch');
+}
+
+function saveEditPfgBatch() {
+  const items = DB.where('finished', f => f.pfgBatchId === _editPfgBatchId);
+  const supplier = document.getElementById('epfg-supplier').value.trim();
+  const billno = document.getElementById('epfg-billno').value.trim();
+  const date = document.getElementById('epfg-date').value;
+  const notes = document.getElementById('epfg-notes').value.trim();
+  if (!supplier) { toast('Supplier name required', 'danger'); return; }
+
+  // update existing
+  items.forEach(f => {
+    DB.update('finished', f.id, {
+      supplierName: supplier, workerName: supplier, billno, date, notes,
+      product: document.getElementById(`epfg-product-${f.id}`)?.value.trim() || f.product,
+      matCostPerPiece: parseFloat(document.getElementById(`epfg-cost-${f.id}`)?.value) || 0
+    });
+  });
+
+  // read new rows directly from DOM
+  let added = 0;
+  document.querySelectorAll('#epfg-new-rows [id^="epfg-new-wrap-"]').forEach(row => {
+    const i = row.id.replace('epfg-new-wrap-', '');
+    const name = (document.getElementById(`epfg-new-name-${i}`)?.value || '').trim();
+    const qty = parseInt(document.getElementById(`epfg-new-qty-${i}`)?.value) || 1;
+    const cost = parseFloat(document.getElementById(`epfg-new-cost-${i}`)?.value) || 0;
+    if (!name) return;
+    for (let j = 0; j < qty; j++) {
+      DB.insert('finished', {
+        product: name, serialNumber: null, date, workerName: supplier,
+        workerId: null, productionId: null,
+        pfgBatchId: _editPfgBatchId,
+        matCostPerPiece: cost, ohCostPerPiece: 0, totalWage: 0,
+        subWorkers: [], materialsUsed: [], polishStatus: 'done',
+        sold: false, purchasedStock: true,
+        supplierName: supplier, billno, notes
+      });
+      added++;
+    }
+  });
+
+  closeModal('modal-edit-pfg-batch');
+  renderFinished(); updateCounts();
+  toast(`Batch updated${added ? ` · ${added} new item(s) added` : ''}`);
+}
 function savePurchasedFG() {
   const supplier = document.getElementById('pfg-supplier').value.trim();
   const date = document.getElementById('pfg-date').value;
@@ -2546,30 +2650,31 @@ function renderFinished() {
         </div>`;
     }).join('');
 
-    return `<div style="background:var(--bg-card);border:1px solid var(--border);border-left:3px solid var(--info);border-radius:12px;margin-bottom:0.65rem;overflow:hidden;box-shadow:var(--shadow-xs)">
+    return `<div style="background:var(--bg-card);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:12px;margin-bottom:0.65rem;overflow:hidden;box-shadow:var(--shadow-xs)">
 
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;padding:0.7rem 1rem;background:var(--info-light);border-bottom:1px solid #bfdbfe;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;padding:0.7rem 1rem;background:var(--amber-pale);border-bottom:1px solid var(--amber-light);flex-wrap:wrap">
         <div style="display:flex;align-items:center;gap:0.65rem;min-width:0">
-          <div style="width:32px;height:32px;border-radius:8px;background:#dbeafe;border:1px solid #bfdbfe;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0">📦</div>
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--amber-light);border:1px solid var(--amber);display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0">📦</div>
           <div>
-            <div style="font-weight:700;font-size:0.88rem;color:var(--info)">Purchased Stock</div>
-            <div style="font-size:0.71rem;color:var(--info);opacity:0.75;margin-top:1px">
+            <div style="font-weight:700;font-size:0.88rem;color:var(--amber-dark)">Purchased Stock</div>
+            <div style="font-size:0.71rem;color:var(--amber-dark);opacity:0.75;margin-top:1px">
               🏪 ${first.supplierName || first.workerName}${first.billno ? ` · Bill #${first.billno}` : ''} · 📅 ${fmtDate(first.date)}
             </div>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:0.4rem;flex-shrink:0;flex-wrap:wrap">
           ${soldCount > 0 ? `<span class="badge badge-success" style="font-size:0.7rem">${soldCount} sold</span>` : ''}
-          ${unsoldItems.length > 0 ? `<span style="font-size:0.7rem;font-weight:600;padding:0.2rem 0.55rem;border-radius:99px;background:#dbeafe;color:var(--info);border:1px solid #bfdbfe">${unsoldItems.length} ready</span>` : ''}
-          <span style="font-size:0.7rem;color:var(--info);opacity:0.65;font-family:var(--font-mono)">${items.length} pc${items.length > 1 ? 's' : ''} · ${groups.length} type${groups.length > 1 ? 's' : ''}</span>
+          ${unsoldItems.length > 0 ? `<span style="font-size:0.7rem;font-weight:600;padding:0.2rem 0.55rem;border-radius:99px;background:var(--amber-light);color:var(--amber-dark);border:1px solid var(--amber)">${unsoldItems.length} ready</span>` : ''}
+          <span style="font-size:0.7rem;color:var(--amber-dark);opacity:0.65;font-family:var(--font-mono)">${items.length} pc${items.length > 1 ? 's' : ''} · ${groups.length} type${groups.length > 1 ? 's' : ''}</span>
         </div>
       </div>
 
       <div>${productLines}</div>
 
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 1rem;background:var(--bg-secondary);border-top:1px solid var(--border-light);flex-wrap:wrap;gap:0.5rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 1rem;background:var(--amber-pale);border-top:1px solid var(--amber-light);flex-wrap:wrap;gap:0.5rem">
         <div style="display:flex;align-items:center;gap:0.5rem">
           ${firstUnsold ? `<button class="btn btn-primary btn-sm" onclick="openSalesModal('${firstUnsold.id}')">🧾 Sell</button>` : `<span class="badge badge-success">All Sold</span>`}
+          <button class="act-btn" style="font-size:0.75rem" onclick="openEditPfgBatchModal('${first.pfgBatchId}')">✏️ Edit Batch</button>
           <button class="act-btn danger" style="font-size:0.75rem" onclick="deletePfgBatch('${first.pfgBatchId}')">🗑 Delete Batch</button>
         </div>
         ${batchTotal > 0 ? `
@@ -2626,7 +2731,7 @@ function renderFinished() {
           : `<span class="fg2-status fg2-pending">🎨 Awaiting Polish</span>`}
           </div>
         </div>
-        <div class="fg2-actions">
+       <div class="fg2-actions">
           ${!f.sold && isReadyToSell
         ? `<button class="btn btn-primary btn-sm" onclick="openSalesModal('${f.id}')">🧾 Sell</button>`
         : !f.sold && isAwaitingPolish
@@ -2637,6 +2742,7 @@ function renderFinished() {
                 📦 Materials <span class="fg2-mat-count">${matCount}</span>
                </button>`
         : ''}
+          <button class="act-btn" onclick="openEditFGModal('${f.id}')">✏️ Edit</button>
           <button class="act-btn danger" onclick="deleteFG('${f.id}')">🗑</button>
         </div>
       </div>
@@ -2650,7 +2756,7 @@ function renderFinished() {
     </div>`;
   }
 
-  list.innerHTML =(Object.values(pmap).length ? `
+  list.innerHTML = (Object.values(pmap).length ? `
     <div class="card" style="margin-bottom:1.2rem">
       <div class="card-hdr">
         <span class="card-title">📊 Product Summary</span>
@@ -2707,11 +2813,11 @@ function openSaleSummaryPopup(id) {
     grouped[it.product].pricePerPc = parseFloat(it.price || 0);
   });
 
-  const subtotal   = parseFloat(sl.subtotal || sl.totalAmount || sl.amount || 0);
-  const taxPct     = parseFloat(sl.taxPct || 0);
-  const taxAmt     = parseFloat(sl.taxAmt || 0);
-  const totalAmt   = parseFloat(sl.totalAmount || sl.amount || 0);
-  const buyerIcon  = sl.buyerType === 'Shop' ? '🏪' : '👤';
+  const subtotal = parseFloat(sl.subtotal || sl.totalAmount || sl.amount || 0);
+  const taxPct = parseFloat(sl.taxPct || 0);
+  const taxAmt = parseFloat(sl.taxAmt || 0);
+  const totalAmt = parseFloat(sl.totalAmount || sl.amount || 0);
+  const buyerIcon = sl.buyerType === 'Shop' ? '🏪' : '👤';
 
   const productRows = Object.entries(grouped).map(([name, g]) => `
     <div class="sale-popup-product-row">
@@ -2747,7 +2853,7 @@ function openSaleSummaryPopup(id) {
           <div class="spb-meta">
             ${sl.buyerType || 'Customer'}
             ${sl.buyerPhone ? ' · 📞 ' + sl.buyerPhone : ''}
-            ${sl.buyerAddr  ? ' · 📍 ' + sl.buyerAddr  : ''}
+            ${sl.buyerAddr ? ' · 📍 ' + sl.buyerAddr : ''}
           </div>
         </div>
 
@@ -2791,6 +2897,16 @@ function openSalesModal(preloadFgId = null, editSaleId = null) {
   if (cntEl) cntEl.textContent = '';
   document.getElementById('fsl-prod-rows').innerHTML = '<div class="sup-empty-hint">No items yet — click "+ Add Product"</div>';
   ['fsl-buyer-name', 'fsl-buyer-phone', 'fsl-buyer-addr', 'fsl-billno'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const amtRecEl = document.getElementById('fsl-amount-received'); if (amtRecEl) amtRecEl.value = '';
+  // Reset fully paid toggle to ON
+  const toggle = document.getElementById('fsl-paid-toggle');
+  const label = document.getElementById('fsl-paid-label');
+  const partialWrap = document.getElementById('fsl-partial-wrap');
+  const knob = toggle?.querySelector('div');
+  if (toggle) { toggle.dataset.on = 'true'; toggle.style.background = 'var(--success)'; }
+  if (knob) knob.style.transform = 'translateX(16px)';
+  if (label) { label.textContent = 'Fully Paid'; label.style.color = 'var(--success)'; }
+  if (partialWrap) partialWrap.style.display = 'none';
   document.getElementById('fsl-date').value = todayStr();
   document.getElementById('fsl-buyer-type').value = 'Shop';
   document.getElementById('fsl-tax-pct').value = '0';
@@ -2806,6 +2922,17 @@ function openSalesModal(preloadFgId = null, editSaleId = null) {
       document.getElementById('fsl-date').value = sl.date || todayStr();
       document.getElementById('fsl-buyer-type').value = sl.buyerType || 'Shop';
       document.getElementById('fsl-tax-pct').value = sl.taxPct || 0;
+      document.getElementById('fsl-amount-received').value = sl.amountReceived || '';
+      // Set toggle based on whether this was a partial payment
+      const isPartial = sl.amountReceived && parseFloat(sl.amountReceived) < parseFloat(sl.totalAmount || sl.amount || 0);
+      if (isPartial) {
+        const t = document.getElementById('fsl-paid-toggle'), kn = t?.querySelector('div');
+        const pw = document.getElementById('fsl-partial-wrap'), lb = document.getElementById('fsl-paid-label');
+        if (t) { t.dataset.on = 'false'; t.style.background = 'var(--border)'; }
+        if (kn) kn.style.transform = 'translateX(0)';
+        if (lb) { lb.textContent = 'Partial Payment'; lb.style.color = 'var(--text-tertiary)'; }
+        if (pw) pw.style.display = 'flex';
+      }
       const grouped = {};
       (sl.items || []).forEach(it => { grouped[it.product] = (grouped[it.product] || 0) + 1; });
       Object.entries(grouped).forEach(([prod, qty]) => _salesAddRow(prod, qty));
@@ -2980,11 +3107,41 @@ function _renderCart() {
 }
 function removeFromCart(i) { _cartItems.splice(i, 1); _renderCart(); _onProductSearch(); }
 function removeGroupFromCart(productName) { _cartItems = _cartItems.filter(it => it.product !== productName); _renderCart(); _onProductSearch(); }
+function _toggleFullyPaid() {
+  const toggle = document.getElementById('fsl-paid-toggle');
+  const label = document.getElementById('fsl-paid-label');
+  const partialWrap = document.getElementById('fsl-partial-wrap');
+  const knob = toggle?.querySelector('div');
+  const isOn = toggle?.dataset.on === 'true';
+  if (isOn) {
+    toggle.dataset.on = 'false';
+    toggle.style.background = 'var(--border)';
+    if (knob) knob.style.transform = 'translateX(0)';
+    label.textContent = 'Partial Payment';
+    label.style.color = 'var(--text-tertiary)';
+    partialWrap.style.display = 'flex';
+    document.getElementById('fsl-amount-received').value = '';
+  } else {
+    toggle.dataset.on = 'true';
+    toggle.style.background = 'var(--success)';
+    if (knob) knob.style.transform = 'translateX(16px)';
+    label.textContent = 'Fully Paid';
+    label.style.color = 'var(--success)';
+    partialWrap.style.display = 'none';
+    document.getElementById('fsl-amount-received').value = '';
+  }
+  _recalcTotals();
+}
 function _recalcTotals() {
   const sub = _cartItems.reduce((s, it) => s + parseFloat(it.price || 0), 0);
   const pct = parseFloat(document.getElementById('fsl-tax-pct')?.value || 0), tax = sub * pct / 100, tot = sub + tax;
+  const isFullyPaid = document.getElementById('fsl-paid-toggle')?.dataset.on === 'true';
+const received = isFullyPaid ? tot : (parseFloat(document.getElementById('fsl-amount-received')?.value) || 0);
+  const balance = Math.max(0, tot - received);
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   set('fsl-subtotal', fmtMoney(sub)); set('fsl-tax-display', fmtMoney(tax)); set('fsl-tax-pct-display', pct); set('fsl-grand-total', fmtMoney(tot));
+  const balEl = document.getElementById('fsl-balance-due'); if (balEl) { balEl.textContent = fmtMoney(balance); balEl.style.color = balance > 0.01 ? 'var(--danger)' : 'var(--success)'; }
+  const balRow = document.getElementById('fsl-balance-row'); if (balRow) balRow.style.display = tot > 0 ? 'flex' : 'none';
 }
 function saveSalesBill() {
   if (!_cartItems.length) { _cartItems = _buildCartFromRows(); }
@@ -2996,16 +3153,110 @@ function saveSalesBill() {
   const taxPct = parseFloat(document.getElementById('fsl-tax-pct').value) || 0;
   const subtotal = _cartItems.reduce((s, it) => s + parseFloat(it.price || 0), 0);
   const taxAmt = subtotal * taxPct / 100, totalAmount = subtotal + taxAmt;
+  const isFullyPaid = document.getElementById('fsl-paid-toggle')?.dataset.on === 'true';
+const amountReceived = isFullyPaid ? totalAmount : (parseFloat(document.getElementById('fsl-amount-received').value) || 0);
+  const balanceDue = Math.max(0, totalAmount - amountReceived);
   const buyerType = document.getElementById('fsl-buyer-type').value;
   if (_editSaleId) {
     const oldSale = DB.find('sales', _editSaleId);
     if (oldSale) { (oldSale.items || []).forEach(it => { if (it.fgId) DB.update('finished', it.fgId, { sold: false, soldDate: null, buyerName: null, buyerType: null, saleId: null }); }); DB.delete('sales', _editSaleId); }
   }
-  const saleDoc = DB.insert('sales', { billno: document.getElementById('fsl-billno').value.trim(), date, buyerType, buyerName, buyerPhone: document.getElementById('fsl-buyer-phone').value.trim(), buyerAddr: document.getElementById('fsl-buyer-addr').value.trim(), items: _cartItems.map(it => ({ fgId: it.fgId, product: it.product, serialNumber: it.serialNumber, workerName: it.workerName, matCostPerPiece: it.matCostPerPiece, ohCostPerPiece: it.ohCostPerPiece, totalWage: it.totalWage, price: it.price })), subtotal, taxPct, taxAmt, totalAmount, product: _cartItems.map(it => it.product).join(', '), serialNumber: _cartItems.map(it => it.serialNumber).join(', ') });
+  const saleDoc = DB.insert('sales', { billno: document.getElementById('fsl-billno').value.trim(), date, buyerType, buyerName, buyerPhone: document.getElementById('fsl-buyer-phone').value.trim(), buyerAddr: document.getElementById('fsl-buyer-addr').value.trim(), items: _cartItems.map(it => ({ fgId: it.fgId, product: it.product, serialNumber: it.serialNumber, workerName: it.workerName, matCostPerPiece: it.matCostPerPiece, ohCostPerPiece: it.ohCostPerPiece, totalWage: it.totalWage, price: it.price })), subtotal, taxPct, taxAmt, totalAmount, amountReceived, balanceDue, product: _cartItems.map(it => it.product).join(', '), serialNumber: _cartItems.map(it => it.serialNumber).join(', ') });
   _cartItems.forEach(it => { DB.update('finished', it.fgId, { sold: true, soldDate: date, buyerName, buyerType, saleId: saleDoc.id }); });
   closeModal('modal-sales'); renderSales(); renderFinished(); updateCounts();
   toast(`Bill ${_editSaleId ? 'updated' : 'saved'} — ${_cartItems.length} item(s) · ${fmtMoney(totalAmount)} `);
   _editSaleId = null;
+}
+function openProdMatPopup(prodId) {
+  const existing = document.getElementById('prod-mat-popup-overlay');
+  if (existing) { existing.remove(); if (existing.dataset.prodId === prodId) return; }
+
+  const prod = DB.find('productions', prodId);
+  const mats = prod?.materialsUsed || [];
+  const pieces = prod?.piecesCount || 1;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'prod-mat-popup-overlay';
+  overlay.dataset.prodId = prodId;
+  overlay.style.cssText = `position:fixed;inset:0;z-index:600;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(0,0,0,0.5);`;
+
+  const matRows = mats.length
+    ? mats.map((m, idx) => `
+        <div style="padding:0.75rem 0;border-bottom:1px solid var(--border-light);${idx === mats.length - 1 ? 'border-bottom:none' : ''}">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.35rem">
+            <div style="display:flex;align-items:center;gap:0.5rem">
+              <div style="width:28px;height:28px;border-radius:7px;background:var(--amber-pale);border:1px solid var(--amber-light);display:flex;align-items:center;justify-content:center;font-size:0.85rem;flex-shrink:0">📦</div>
+              <span style="font-weight:600;font-size:0.85rem;color:var(--text-primary)">${m.mat}</span>
+            </div>
+            <span style="font-family:var(--font-mono);font-size:0.88rem;font-weight:700;color:var(--amber-dark)">${fmtNum(m.qty)} <span style="font-size:0.7rem;font-weight:500;color:var(--text-tertiary)">${m.unit || ''}</span></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:0.5rem;padding-left:0.25rem">
+            <div style="flex:1;height:6px;background:var(--bg-tertiary);border-radius:99px;overflow:hidden">
+              <div style="height:100%;width:${Math.min(100, Math.round((parseFloat(m.qty) / Math.max(...mats.map(x => parseFloat(x.qty || 0)))) * 100))}%;background:linear-gradient(90deg,var(--amber),var(--amber-dark));border-radius:99px;transition:width 0.4s ease"></div>
+            </div>
+            <span style="font-size:0.68rem;color:var(--text-light);white-space:nowrap;font-family:var(--font-mono)">per piece</span>
+          </div>
+        </div>`).join('')
+    : `<div style="text-align:center;padding:2rem 0;color:var(--text-light);font-size:0.82rem">No materials recorded</div>`;
+
+  overlay.innerHTML = `
+    <div style="background:var(--bg-card);border-radius:16px;border:1px solid var(--border);box-shadow:var(--shadow-lg);width:100%;max-width:400px;overflow:hidden;animation:mpopIn 0.18s cubic-bezier(0.22,1,0.36,1)">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;padding:1rem 1.2rem 0.8rem;background:linear-gradient(135deg,var(--sidebar-bg),#252c3f);border-bottom:1px solid rgba(255,255,255,0.08)">
+        <div>
+          <div style="font-family:var(--font-display);font-size:0.95rem;font-weight:600;color:#fff">📦 Materials / Piece</div>
+          <div style="font-size:0.7rem;color:rgba(255,255,255,0.4);font-family:var(--font-mono);margin-top:3px">${prod?.product || ''} · ${pieces} pc${pieces > 1 ? 's' : ''} · ${fmtDate(prod?.date)}</div>
+        </div>
+        <button onclick="document.getElementById('prod-mat-popup-overlay').remove()" style="background:rgba(255,255,255,0.1);border:none;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:1rem;color:rgba(255,255,255,0.6);display:flex;align-items:center;justify-content:center;transition:background 0.15s;flex-shrink:0">×</button>
+      </div>
+      <div style="max-height:380px;overflow-y:auto;padding:0.3rem 1.2rem 0.8rem">
+        <div style="display:flex;align-items:center;gap:0.4rem;padding:0.6rem 0 0.2rem;font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-light)">
+          <span style="flex:1">Material</span>
+          <span>Qty / Piece</span>
+        </div>
+        ${matRows}
+      </div>
+      <div style="padding:0.6rem 1.2rem;background:var(--bg-secondary);border-top:1px solid var(--border-light);display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:0.72rem;color:var(--text-tertiary)">${mats.length} material${mats.length !== 1 ? 's' : ''} used</span>
+        <span style="font-size:0.72rem;font-family:var(--font-mono);color:var(--text-tertiary)">${pieces} pc${pieces > 1 ? 's' : ''} produced</span>
+      </div>
+    </div>`;
+
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+let _editFGId = null;
+function openEditFGModal(id) {
+  _editFGId = id;
+  const f = DB.find('finished', id); if (!f) return;
+  document.getElementById('efg-product').value = f.product || '';
+  document.getElementById('efg-serial').value = f.serialNumber || '';
+  document.getElementById('efg-date').value = f.date || todayStr();
+  document.getElementById('efg-worker').value = f.workerName || '';
+  document.getElementById('efg-mat-cost').value = f.matCostPerPiece || 0;
+  document.getElementById('efg-notes').value = f.notes || '';
+  openModal('modal-edit-fg');
+  setTimeout(() => document.getElementById('efg-product')?.focus(), 100);
+}
+
+function saveEditFG() {
+  const f = DB.find('finished', _editFGId); if (!f) return;
+  const product = document.getElementById('efg-product').value.trim();
+  const serial = document.getElementById('efg-serial').value.trim();
+  if (!product) { toast('Product name required', 'danger'); return; }
+  if (serial && serial !== f.serialNumber && !DB.isSerialUnique(serial)) {
+    toast('Serial number already in use', 'danger'); return;
+  }
+  DB.update('finished', _editFGId, {
+    product,
+    serialNumber: serial || f.serialNumber,
+    date: document.getElementById('efg-date').value,
+    workerName: document.getElementById('efg-worker').value.trim(),
+    matCostPerPiece: parseFloat(document.getElementById('efg-mat-cost').value) || 0,
+    notes: document.getElementById('efg-notes').value.trim()
+  });
+  closeModal('modal-edit-fg');
+  renderFinished(); updateCounts();
+  toast(`"${product}" updated`);
 }
 function renderSales() {
   const allSales = DB.all('sales');
@@ -3109,7 +3360,18 @@ function renderSales() {
           </div>`).join('')}
       </div>
       <div class="sl-card-foot">
-        <strong style="font-family:var(--font-mono);font-size:1rem;color:var(--success);margin-right:auto">${fmtMoney(sl.totalAmount || sl.amount || 0)}</strong>
+        ${(() => {
+        const total = parseFloat(sl.totalAmount || sl.amount || 0);
+        const extraPaid = DB.where('salePayments', p => p.saleId === sl.id).reduce((s, p) => s + parseFloat(p.amount || 0), 0);
+        const received = parseFloat(sl.amountReceived ?? total) + extraPaid;
+        const balance = Math.max(0, total - received);
+        return `<div style="display:flex;flex-direction:column;gap:0.1rem;margin-right:auto">
+            <strong style="font-family:var(--font-mono);font-size:1rem;color:var(--success)">${fmtMoney(total)}</strong>
+            ${balance > 0.01
+            ? `<span style="font-family:var(--font-mono);font-size:0.72rem;color:var(--danger);font-weight:700;cursor:pointer" onclick="nav('balances')">⚠ Due: ${fmtMoney(balance)}</span>`
+            : `<span style="font-size:0.7rem;color:var(--success)">✓ Fully Paid</span>`}
+          </div>`;
+      })()}
         <button class="btn btn-ghost btn-sm" onclick="openSaleSummaryPopup('${sl.id}')">👁 View</button>
         <button class="btn btn-ghost btn-sm" onclick="openSalesModal(null,'${sl.id}')">✏️ Edit</button>
         <button class="btn btn-ghost btn-sm" onclick="printSalesBill('${sl.id}')">🖨 Print Bill</button>
@@ -3437,7 +3699,137 @@ function deleteSale(id) {
   (sl.items || [{ fgId: sl.fgId }]).forEach(it => { if (it.fgId) DB.update('finished', it.fgId, { sold: false, soldDate: null, buyerName: null, buyerType: null, saleId: null }); });
   renderSales(); renderFinished(); updateCounts(); toast('Deleted', 'warning');
 }
+/* ═══════════ BALANCES ═══════════ */
+function renderBalances() {
+  const sales = DB.all('sales');
+  const pageEl = document.getElementById('page-balances'); if (!pageEl) return;
+  let listEl = pageEl.querySelector('.page-inner');
+  if (!listEl) { pageEl.innerHTML = '<div class="page-inner"></div>'; listEl = pageEl.querySelector('.page-inner'); }
 
+  const enriched = sales.map(sl => {
+    const total = parseFloat(sl.totalAmount || sl.amount || 0);
+    const extraPaid = DB.where('salePayments', p => p.saleId === sl.id).reduce((s, p) => s + parseFloat(p.amount || 0), 0);
+    const initialReceived = parseFloat(sl.amountReceived ?? total);
+    const received = initialReceived + extraPaid;
+    const balance = Math.max(0, total - received);
+    return { ...sl, _total: total, _received: received, _balance: balance };
+  });
+
+  const pending = enriched.filter(sl => sl._balance > 0.01).sort((a, b) => b._balance - a._balance);
+  const fullyPaid = enriched.filter(sl => sl._balance <= 0.01).sort((a, b) => new Date(b.date) - new Date(a.date));
+  const totalRevenue = enriched.reduce((s, sl) => s + sl._total, 0);
+  const totalCollected = enriched.reduce((s, sl) => s + sl._received, 0);
+  const totalOutstanding = pending.reduce((s, sl) => s + sl._balance, 0);
+
+  function renderBillCard(sl, isPending) {
+    const payments = DB.where('salePayments', p => p.saleId === sl.id).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    const buyerIcon = sl.buyerType === 'Shop' ? '🏪' : '👤';
+    const allPayments = [...payments];
+    // Also include the initial payment from amountReceived if it was partial
+    const initialAmt = parseFloat(sl.amountReceived ?? 0);
+    const showInitial = initialAmt > 0 && initialAmt < sl._total;
+
+    return `<div class="card" style="margin-bottom:0.8rem;border-left:3px solid ${isPending ? 'var(--danger)' : 'var(--success)'}">
+      <div class="card-hdr" style="background:${isPending ? '#fff5f5' : 'var(--success-light)'}">
+        <div>
+          <div style="font-weight:700;font-size:0.95rem;color:var(--text-primary)">${buyerIcon} ${sl.buyerName}</div>
+          <div style="font-size:0.74rem;color:var(--text-tertiary);margin-top:0.1rem">
+            ${sl.billno ? 'Bill #' + sl.billno + ' · ' : ''}${fmtDate(sl.date)} · ${(sl.items || []).length} item(s)${sl.buyerPhone ? ' · 📞 ' + sl.buyerPhone : ''}
+          </div>
+        </div>
+        <div style="display:flex;gap:0.4rem;align-items:center">
+          ${isPending ? `<button class="btn btn-success btn-sm" onclick="openSalePaymentModal('${sl.id}','${sl.buyerName.replace(/'/g, "\\'")}',${sl._balance})">💸 Collect</button>` : `<span class="badge badge-success">✓ Fully Paid</span>`}
+          <button class="btn btn-ghost btn-sm" onclick="nav('sales')">🧾 View Bill</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0.75rem 1rem">
+        <div style="display:flex;gap:2rem;flex-wrap:wrap;margin-bottom:${(allPayments.length || showInitial) ? '0.75rem' : '0'}">
+          <div><div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-light);margin-bottom:0.2rem">Bill Total</div><div style="font-family:var(--font-mono);font-weight:700;font-size:0.9rem;color:var(--text-primary)">${fmtMoney(sl._total)}</div></div>
+          <div><div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-light);margin-bottom:0.2rem">Received</div><div style="font-family:var(--font-mono);font-weight:700;font-size:0.9rem;color:var(--success)">${fmtMoney(sl._received)}</div></div>
+          <div><div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:${isPending ? 'var(--danger)' : 'var(--success)'};margin-bottom:0.2rem">${isPending ? 'Balance Due' : 'Status'}</div><div style="font-family:var(--font-mono);font-weight:700;font-size:${isPending ? '1.1rem' : '0.9rem'};color:${isPending ? 'var(--danger)' : 'var(--success)'}">${isPending ? fmtMoney(sl._balance) : '✓ Cleared'}</div></div>
+        </div>
+        ${(allPayments.length || showInitial) ? `
+          <div style="border-top:1px solid var(--border-light);padding-top:0.6rem">
+            <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-tertiary);margin-bottom:0.5rem">💳 Payment Timeline</div>
+            <div style="position:relative;padding-left:1.8rem">
+              <div style="position:absolute;left:0.6rem;top:0;bottom:0;width:2px;background:var(--border-light)"></div>
+              ${showInitial ? `
+                <div style="position:relative;padding:0.5rem 0.75rem 0.5rem 0.5rem;border-bottom:1px solid var(--border-light)">
+                  <div style="position:absolute;left:-0.62rem;top:0.85rem;width:9px;height:9px;border-radius:50%;background:var(--info);border:2px solid var(--bg-card)"></div>
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem">
+                    <div>
+                      <div style="font-weight:600;font-size:0.82rem;color:var(--text-primary)">Initial payment on bill</div>
+                      <div style="font-size:0.7rem;color:var(--text-tertiary);margin-top:0.1rem">${fmtDate(sl.date)}</div>
+                    </div>
+                    <span style="font-family:var(--font-mono);font-weight:700;color:var(--info);font-size:0.88rem;flex-shrink:0">${fmtMoney(initialAmt)}</span>
+                  </div>
+                </div>` : ''}
+              ${allPayments.map(p => `
+                <div style="position:relative;padding:0.5rem 0.75rem 0.5rem 0.5rem;border-bottom:1px solid var(--border-light)">
+                  <div style="position:absolute;left:-0.62rem;top:0.85rem;width:9px;height:9px;border-radius:50%;background:var(--success);border:2px solid var(--bg-card)"></div>
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem">
+                    <div>
+                      <div style="font-weight:600;font-size:0.82rem;color:var(--text-primary)">${p.notes || 'Payment collected'}</div>
+                      <div style="font-size:0.7rem;color:var(--text-tertiary);margin-top:0.1rem">${fmtDate(p.date)}</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0">
+                      <span style="font-family:var(--font-mono);font-weight:700;color:var(--success);font-size:0.88rem">${fmtMoney(p.amount)}</span>
+                      <button class="act-btn danger" style="font-size:0.62rem;padding:0.15rem 0.35rem" onclick="deleteSalePayment('${sl.id}','${p.id}')">🗑</button>
+                    </div>
+                  </div>
+                </div>`).join('')}
+            </div>
+          </div>` : ''}
+      </div>
+    </div>`;
+  }
+
+  listEl.innerHTML = `
+    <div class="stat-grid" style="margin-bottom:1.2rem">
+      <div class="stat-card" style="border-color:var(--success-light)"><span class="sc-ico">💰</span><div class="sc-lbl">Total Revenue</div><div class="sc-val" style="font-size:1.1rem;color:var(--success)">${fmtMoney(totalRevenue)}</div></div>
+      <div class="stat-card" style="border-color:var(--info-light)"><span class="sc-ico">✅</span><div class="sc-lbl">Collected</div><div class="sc-val" style="font-size:1.1rem;color:var(--info)">${fmtMoney(totalCollected)}</div></div>
+      <div class="stat-card" style="border-color:${totalOutstanding > 0 ? 'var(--danger-light)' : 'var(--success-light)'}"><span class="sc-ico">${totalOutstanding > 0 ? '⚠' : '✓'}</span><div class="sc-lbl">Outstanding</div><div class="sc-val" style="font-size:1.1rem;color:${totalOutstanding > 0 ? 'var(--danger)' : 'var(--success)'}">${fmtMoney(totalOutstanding)}</div><div class="sc-sub">${pending.length} bill(s) pending</div></div>
+    </div>
+
+    ${pending.length ? `
+      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--danger);margin-bottom:0.6rem">⚠ Outstanding (${pending.length})</div>
+      ${pending.map(sl => renderBillCard(sl, true)).join('')}
+    ` : `<div class="banner banner-success" style="margin-bottom:1rem"><span class="banner-ico">🎉</span><div><strong>No outstanding balances!</strong></div></div>`}
+
+    ${fullyPaid.length ? `
+      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--success);margin:1.2rem 0 0.6rem">✓ Fully Paid (${fullyPaid.length})</div>
+      ${fullyPaid.map(sl => renderBillCard(sl, false)).join('')}
+    ` : ''}
+  `;
+}
+let _salePaySaleId = null;
+function openSalePaymentModal(saleId, buyerName, balanceDue) {
+  _salePaySaleId = saleId;
+  document.getElementById('sp-modal-buyer').textContent = buyerName;
+  document.getElementById('sp-modal-balance').textContent = fmtMoney(balanceDue);
+  document.getElementById('sp-modal-amount').value = balanceDue > 0 ? Math.round(balanceDue) : '';
+  document.getElementById('sp-modal-date').value = todayStr();
+  document.getElementById('sp-modal-notes').value = '';
+  openModal('modal-sale-payment');
+  setTimeout(() => document.getElementById('sp-modal-amount')?.focus(), 100);
+}
+function saveSalePayment() {
+  const amt = parseFloat(document.getElementById('sp-modal-amount').value);
+  if (!amt || amt <= 0) { toast('Enter a valid amount', 'danger'); return; }
+  const date = document.getElementById('sp-modal-date').value;
+  if (!date) { toast('Select a date', 'danger'); return; }
+  const notes = document.getElementById('sp-modal-notes').value.trim();
+  DB.insert('salePayments', { saleId: _salePaySaleId, amount: amt, date, notes });
+  closeModal('modal-sale-payment');
+  renderBalances(); renderSales(); updateCounts();
+  toast(`Payment of ${fmtMoney(amt)} recorded ✅`);
+}
+function deleteSalePayment(saleId, payId) {
+  if (!confirm('Delete this payment record?')) return;
+  DB.delete('salePayments', payId);
+  renderBalances(); renderSales(); updateCounts();
+  toast('Payment deleted', 'warning');
+}
 /* ═══════════ REPORTS ═══════════ */
 function renderReports() {
   const mats = DB.all('materials'), workers = DB.all('workers'), prods = DB.all('productions'), fin = DB.all('finished'), sales = DB.all('sales'), polishJobs = DB.all('polishJobs');
@@ -3771,6 +4163,22 @@ function createModals() {
           <div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-bottom:0.3rem"><span style="color:var(--text-tertiary)">Subtotal</span><strong id="fsl-subtotal" style="font-family:var(--font-mono)">₹0.00</strong></div>
           <div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-bottom:0.3rem"><span style="color:var(--text-tertiary)">Tax (<span id="fsl-tax-pct-display">0</span>%)</span><strong id="fsl-tax-display" style="font-family:var(--font-mono)">₹0.00</strong></div>
           <div style="display:flex;justify-content:space-between;font-size:0.95rem;padding-top:0.4rem;border-top:1px solid var(--border)"><span style="font-weight:700">Total</span><strong id="fsl-grand-total" style="font-family:var(--font-mono);color:var(--success);font-size:1.05rem">₹0.00</strong></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding-top:0.5rem;margin-top:0.3rem;border-top:1px dashed var(--border);gap:0.75rem;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;margin:0">
+              <div id="fsl-paid-toggle" onclick="_toggleFullyPaid()" style="width:36px;height:20px;border-radius:10px;background:var(--success);cursor:pointer;position:relative;transition:background 0.2s;flex-shrink:0" data-on="true">
+                <div style="position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform 0.2s;transform:translateX(16px)"></div>
+              </div>
+              <span style="font-size:0.78rem;font-weight:700;color:var(--success)" id="fsl-paid-label">Fully Paid</span>
+            </label>
+            <div id="fsl-partial-wrap" style="display:none;align-items:center;gap:0.5rem">
+              <span style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-tertiary)">Amount Received ₹</span>
+              <input id="fsl-amount-received" type="number" min="0" step="0.01" placeholder="0.00" oninput="_recalcTotals()" style="width:130px;text-align:right;font-weight:600;padding:0.3rem 0.5rem;border:1px solid var(--border);border-radius:6px;font-family:var(--font-mono);font-size:0.85rem;background:var(--bg-card);color:var(--text-secondary)"/>
+            </div>
+          </div>
+          <div id="fsl-balance-row" style="display:none;justify-content:space-between;align-items:center;padding:0.4rem 0.6rem;background:var(--danger-light);border-radius:7px;margin-top:0.4rem">
+            <span style="font-size:0.8rem;font-weight:700;color:var(--danger)">⚠ Balance Due</span>
+            <strong id="fsl-balance-due" style="font-family:var(--font-mono);font-size:0.95rem;color:var(--danger)">₹0.00</strong>
+          </div>
         </div>
       </div>
 
@@ -3855,6 +4263,68 @@ function createModals() {
       </div>
     </div>
   </div>
+  <div class="modal-backdrop" id="modal-edit-fg">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div><h3 class="modal-title">✏️ Edit Finished Good</h3><p class="modal-sub">Update product details</p></div>
+      <button class="modal-close" onclick="closeModal('modal-edit-fg')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row"><div class="field-group fg-full"><label>Product Name *</label><input class="finput" id="efg-product" type="text" placeholder="e.g. Teak Chair"/></div></div>
+      <div class="form-row">
+        <div class="field-group"><label>Serial Number</label><input class="finput" id="efg-serial" type="text" placeholder="e.g. VI-CH-001"/></div>
+        <div class="field-group"><label>Date</label><input class="finput" id="efg-date" type="date"/></div>
+      </div>
+      <div class="form-row">
+        <div class="field-group"><label>Worker Name</label><input class="finput" id="efg-worker" type="text" placeholder="Worker name"/></div>
+        <div class="field-group"><label>Mat. Cost / Piece (₹)</label><input class="finput" id="efg-mat-cost" type="number" min="0" step="0.01" placeholder="0.00"/></div>
+      </div>
+      <div class="form-row"><div class="field-group fg-full"><label>Notes</label><input class="finput" id="efg-notes" type="text" placeholder="Optional notes…"/></div></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-fg')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEditFG()">💾 Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modal-edit-pfg-batch">
+  <div class="modal modal-lg">
+    <div class="modal-hdr">
+      <div><h3 class="modal-title">✏️ Edit Purchased Stock Batch</h3><p class="modal-sub">Update supplier info, edit existing items, or add new ones</p></div>
+      <button class="modal-close" onclick="closeModal('modal-edit-pfg-batch')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row three">
+        <div class="field-group"><label>Supplier Name *</label><input class="finput" id="epfg-supplier" type="text" placeholder="Supplier name"/></div>
+        <div class="field-group"><label>Bill No.</label><input class="finput" id="epfg-billno" type="text" placeholder="INV-001"/></div>
+        <div class="field-group"><label>Date</label><input class="finput" id="epfg-date" type="date"/></div>
+      </div>
+      <div class="form-row"><div class="field-group fg-full"><label>Notes</label><input class="finput" id="epfg-notes" type="text" placeholder="Optional notes…"/></div></div>
+
+      <div class="approve-section">
+        <p class="section-label">Existing Items</p>
+        <div style="display:grid;grid-template-columns:1fr 110px;gap:0.5rem;padding:0.3rem 0;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-tertiary);margin-bottom:0.2rem">
+          <span>Product Name</span><span>Purchase Cost ₹</span>
+        </div>
+        <div id="epfg-items-wrap"></div>
+      </div>
+
+      <div class="approve-section">
+        <p class="section-label">Add New Items</p>
+        <div style="display:grid;grid-template-columns:1fr 70px 110px 28px;gap:0.4rem;padding:0.3rem 0;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-tertiary);margin-bottom:0.2rem">
+          <span>Product Name</span><span>Qty</span><span>Cost ₹</span><span></span>
+        </div>
+        <div id="epfg-new-rows"><div class="sup-empty-hint">No new items — click "+ Add Item"</div></div>
+        <button class="add-row-btn" onclick="_epfgAddNewRow()">+ Add Item</button>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-pfg-batch')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEditPfgBatch()">💾 Save Changes</button>
+    </div>
+  </div>
+</div>
     `;
   document.querySelectorAll('.modal-backdrop').forEach(el => el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); }));
 
@@ -3877,4 +4347,27 @@ function createModals() {
   document.getElementById('fi-save')?.addEventListener('click', saveIssuance);
   document.getElementById('fp-save')?.addEventListener('click', saveProduction);
   document.getElementById('pj-add-mat-row')?.addEventListener('click', () => { _polishMatRows.push({ mat: '', qty: 0, unit: '', maxQty: 0 }); _renderPolishMatRows(); });
+
+  // sale payment modal wiring
+  document.getElementById('modals-container').insertAdjacentHTML('beforeend', `
+    <div class="modal-backdrop" id="modal-sale-payment">
+      <div class="modal">
+        <div class="modal-hdr">
+          <div><h3 class="modal-title">💸 Record Payment</h3><p class="modal-sub">Buyer: <strong id="sp-modal-buyer"></strong> · Due: <strong id="sp-modal-balance" style="color:var(--danger)"></strong></p></div>
+          <button class="modal-close" onclick="closeModal('modal-sale-payment')">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="field-group"><label>Amount Received (₹) *</label><input class="finput" id="sp-modal-amount" type="number" min="1" step="1" placeholder="0"/></div>
+            <div class="field-group"><label>Date *</label><input class="finput" id="sp-modal-date" type="date"/></div>
+          </div>
+          <div class="form-row"><div class="field-group fg-full"><label>Notes (optional)</label><input class="finput" id="sp-modal-notes" type="text" placeholder="e.g. Cash, UPI, cheque…"/></div></div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" onclick="closeModal('modal-sale-payment')">Cancel</button>
+          <button class="btn btn-success" onclick="saveSalePayment()">✅ Record Payment</button>
+        </div>
+      </div>
+    </div>`);
+  document.getElementById('modal-sale-payment')?.addEventListener('click', e => { if (e.target === document.getElementById('modal-sale-payment')) closeModal('modal-sale-payment'); });
 }
